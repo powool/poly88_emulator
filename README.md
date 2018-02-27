@@ -8,11 +8,13 @@ taking a step towards preserving my experience with a Poly-88, from which
 I learned just about everything important about computing.
 
 Paul Anderson
-pha@umich.edu
 
 ---------------------------
-contents:
 
+Contents:
+---------
+
+~~~~~~~~
 README.md		this file
 CMakeLists.txt	CMakefile for this program
 POLY-88-EPROM	1K ROM monitor for poly-88
@@ -27,18 +29,24 @@ poly88.cpp	main program for poly-88 specific emulator
 poly88_devices.cpp	poly 88 specific i/o devices (keyboard, timer -
 		will eventually have a tape interface)
 poly88_devices.h	definitions of functions in poly88_devices.cc
+~~~~~~~~
 
-To build:
+Building:
+---------
+
 	cmake -DCMAKE_BUILD_TYPE=Debug
 	make
 
-To run:
+Running:
+--------
+
     from this directory, type:
     ./poly88
 
     It reads the EPROM from the file POLY-88-EPROM, then executes it.
 
-To use:
+	To use:
+
     Comes up initially with a blank screen, waiting for a 'P' or a 'B'
     character to be typed for tape loading.
 
@@ -49,6 +57,7 @@ To use:
     To get to the poly-88 debugger, type ^Z, you are now in the front
     panel display:
 
+~~~~~~~~
 PC 006F 0C 0C 7E B7 C2 6E 00 35
 SP 0FF8 FF 6F 00 00 04 23 0C A4
 HL 0C0C 00 00 00 FF 00 97 F8 00
@@ -64,6 +73,7 @@ FFF8    00 00 00 00 00 00 00 00
 0008    F5 C5 D5 E5 2A 10 0C E9
 0010    F5 C5 D5 E5 2A 12 0C E9
 0018    F5 C5 D5 E5 2A 14 0C E9
+~~~~~~~~
 
 
     The upper panel shows registers, their values, then 8 bytes of memory
