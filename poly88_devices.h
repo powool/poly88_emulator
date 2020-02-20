@@ -3,19 +3,10 @@
 #include "i8080_types.h"
 #include "devices.h"
 
-
-#include <stdio.h>
-#include <sys/ioctl.h>
-#include <sys/fcntl.h>
-#include <signal.h>
-#include <termios.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <queue>
-#include <stdlib.h>
-#include <string.h>
-
 #include <fstream>
+#include <functional>
+#include <memory>
+#include <queue>
 
 extern void MyIntSleep(int);
 

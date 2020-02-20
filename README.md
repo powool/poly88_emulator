@@ -33,7 +33,7 @@ poly88_devices.h	definitions of functions in poly88_devices.cc
 
 Building:
 ---------
-
+	sudo apt-get install libsdl2-dev libsdl2-image-dev
 	cmake -DCMAKE_BUILD_TYPE=Debug
 	make
 
