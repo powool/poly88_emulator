@@ -33,8 +33,6 @@ I8080::I8080()
 	}
 
 	regPC_breakpoint = 0x0;
-	regPC_watchpoint = 0;
-	watchpoint_location = 0x0c0e;
 }
 
 I8080::~I8080()
@@ -268,11 +266,6 @@ int I8080::ExecuteCycle(Devices *dev)
 	if(regPC_breakpoint && regPC_breakpoint==PC())
 	{
 		std::cerr << "got to breakpoint at pc=0x" << util::hex(4) << PC() << std::endl;
-	}
-	if(regPC_watchpoint && regPC_watchpoint==PC())
-	{
-		tmp16 = memory.get_2byte(watchpoint_location);
-		std::cout << "at watchpoint 0x" << util::hex(4) << regPC_watchpoint << ", location 0x" << watchpoint_location << "=0x" << tmp16 << "\n";
 	}
 
 	// decode instruction and execute it

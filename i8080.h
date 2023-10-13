@@ -36,8 +36,6 @@ private:
 	uint16_t regSP;
 	uint16_t regPC;
 	uint16_t regPC_breakpoint;
-	uint16_t regPC_watchpoint;
-	uint16_t watchpoint_location;
 
 	uint8_t  regA;
 
