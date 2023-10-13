@@ -1,7 +1,10 @@
 
 #include <iostream>
+#include <sstream>
+#include <string>
 #include <stdlib.h>
 #include "i8080.h"
+#include "i8080_trace.hpp"
 #include "poly88_devices.h"
 #include "util.h"
 #include "z80d.h"
@@ -55,7 +58,7 @@ int I8080::ExecuteCycle(Devices *dev)
 	uint16_t    tword1;
 
 // instructions that are invalid call this macro
-#define INVALID() abort();
+#define INVALID() { ; }
 
 #define PUSH(val) \
 	{SP(SP()-2); memory.set_2byte(SP(),val);}
@@ -260,66 +263,8 @@ int I8080::ExecuteCycle(Devices *dev)
 			PC(n*8); \
 			return 0;
 
-	// enable debug during a range
-	if(PC() >= m_debug_on && PC() <= m_debug_off)
-		m_debug = true;
-	else
-		m_debug = false;
-
 	if(m_singleStepCounter > 0 && --m_singleStepCounter == 0) Interrupt(7);
-	else if(m_debug)
-	{
-		std::cerr << util::hex(4) << PC() << "   ";
-
-		unsigned char instruction[8];
-		instruction[0] = memory.get_byte(PC());
-		instruction[1] = memory.get_byte(PC()+1);
-		instruction[2] = memory.get_byte(PC()+2);
-		instruction[3] = memory.get_byte(PC()+3);
-		instruction[4] = memory.get_byte(PC()+4);
-		instruction[5] = memory.get_byte(PC()+5);
-		instruction[6] = memory.get_byte(PC()+6);
-		instruction[7] = memory.get_byte(PC()+7);
-
-		const unsigned char *in = instruction;
-		char args[64];
-
-		auto z80_instruction_size = z80_disassemble_size(in);
-
-		std::cerr << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC())) << " ";
-		if(z80_instruction_size>1)
-			std::cerr << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC()+1)) << " ";
-		else
-			std::cerr << "   ";
-		if(z80_instruction_size>2)
-			std::cerr << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC()+2)) << " " ;
-		else
-			std::cerr << "   ";
-
-		auto z80_instruction = z80_disassemble( in, args, 0, true );
-
-		std::cerr.fill(' ');
-		std::cerr.width(5);
-		std::cerr << std::left << z80_instruction;
-		std::cerr.width(14);
-		std::cerr << std::left << args;
-		std::cerr.width(0);
-		std::cerr << std::right;
-
-		std::cerr << "a:" << util::hex(2) << static_cast<uint16_t>(A()) << " bc=" << util::hex(4) << BC() << " de=" << util::hex(4) << DE() << " hl=" << util::hex(4) << HL() << " m=" << util::hex(2) << static_cast<uint16_t>(M()) << " sp=" << util::hex(4) << SP() << "\tpsw=";
-		if(m_PSW.zero) std::cerr << "Z,";
-		else std::cerr << "NZ,";
-		if(m_PSW.parity) std::cerr << "PE,";
-		else std::cerr << "PO,";
-		if(m_PSW.carry) std::cerr << "C,";
-		else std::cerr << "NC,";
-		if(m_PSW.aux_carry) std::cerr << "AC";
-		else std::cerr << "NAC";
-
-
-		std::cerr << std::endl;
-
-	}
+	RunTraces();
 	if(m_regPC_breakpoint && m_regPC_breakpoint==PC())
 	{
 		std::cerr << "got to breakpoint at pc=0x" << util::hex(4) << PC() << std::endl;
@@ -329,6 +274,8 @@ int I8080::ExecuteCycle(Devices *dev)
 		tmp16 = memory.get_2byte(m_watchpoint_location);
 		std::cout << "at watchpoint 0x" << util::hex(4) << m_regPC_watchpoint << ", location 0x" << m_watchpoint_location << "=0x" << tmp16 << "\n";
 	}
+
+	// decode instruction and execute it
 	switch(memory.get_byte(PC()))
 	{
 
@@ -1001,9 +948,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xf9:  /* SPHL */
-			tmp16 = HL();
-			HL(SP());
-			SP(tmp16);
+			SP(HL());
 			PC(PC() + 1);
 			return 0;
 
@@ -1064,3 +1009,100 @@ bool I8080::Interrupt(int i)
 	return true;
 }
 
+void I8080::RunTraces()
+{
+	for(auto &trace : traces) {
+		switch(trace.what) {
+			case I8080Trace::PC:
+				if (trace.when == I8080Trace::WHEN_RANGE &&
+						trace.action == I8080Trace::SKIP_TRACING &&
+						trace.inRange(PC())) {
+					return;
+				}
+				if (trace.when == I8080Trace::WHEN_RANGE &&
+						trace.action == I8080Trace::DISASSEMBLY &&
+						trace.inRange(PC())) {
+					std::cerr << Disassemble(PC()) << std::endl;
+					continue;
+				}
+				break;
+			default:
+				break;
+		}
+	}
+}
+
+bool I8080::RunEmulatorCommand(const std::vector<std::string> &args)
+{
+	if (args.size() == 4 && args[0] == "trace" && args[1] == "skip") {
+		uint16_t low = std::stoi(args[2], nullptr, 16);
+		uint16_t high = std::stoi(args[3], nullptr, 16);
+		I8080Trace newTrace(I8080Trace::PC, I8080Trace::WHEN_RANGE,I8080Trace::SKIP_TRACING, low, high);
+		traces.push_back(newTrace);
+		std::cout << "set trace skip for range (" << std::hex << low << ", " << high << ")." << std::endl;
+	}
+	if (args.size() == 4 && args[0] == "trace" && args[1] == "pc") {
+		uint16_t low = std::stoi(args[2], nullptr, 16);
+		uint16_t high = std::stoi(args[3], nullptr, 16);
+		I8080Trace newTrace(I8080Trace::PC, I8080Trace::WHEN_RANGE,I8080Trace::DISASSEMBLY, low, high);
+		traces.push_back(newTrace);
+		std::cout << "set pc tracing for range (" << std::hex << low << ", " << high << ")." << std::endl;
+	}
+
+	return false;
+}
+
+std::string I8080::Disassemble(uint16_t pc)
+{
+	std::stringstream outputLine;
+
+	outputLine << util::hex(4) << PC() << "   ";
+
+	unsigned char instruction[8];
+	instruction[0] = memory.get_byte(PC());
+	instruction[1] = memory.get_byte(PC()+1);
+	instruction[2] = memory.get_byte(PC()+2);
+	instruction[3] = memory.get_byte(PC()+3);
+	instruction[4] = memory.get_byte(PC()+4);
+	instruction[5] = memory.get_byte(PC()+5);
+	instruction[6] = memory.get_byte(PC()+6);
+	instruction[7] = memory.get_byte(PC()+7);
+
+	const unsigned char *in = instruction;
+	char args[64];
+
+	auto z80_instruction_size = z80_disassemble_size(in);
+
+	outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC())) << " ";
+	if(z80_instruction_size>1)
+		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC()+1)) << " ";
+	else
+		outputLine << "   ";
+	if(z80_instruction_size>2)
+		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC()+2)) << " " ;
+	else
+		outputLine << "   ";
+
+	auto z80_instruction = z80_disassemble( in, args, 0, true );
+
+	outputLine.fill(' ');
+	outputLine.width(5);
+	outputLine << std::left << z80_instruction;
+	outputLine.width(14);
+	outputLine << std::left << args;
+	outputLine.width(0);
+	outputLine << std::right;
+
+	auto tos = memory.get_2byte(SP());
+	outputLine << "a:" << util::hex(2) << static_cast<uint16_t>(A()) << " bc=" << util::hex(4) << BC() << " de=" << util::hex(4) << DE() << " hl=" << util::hex(4) << HL() << " m=" << util::hex(2) << static_cast<uint16_t>(M()) << " sp=" << util::hex(4) << SP() << " *sp=" << tos << "\tpsw=";
+	if(m_PSW.zero) outputLine << "Z,";
+	else outputLine << "NZ,";
+	if(m_PSW.parity) outputLine << "PE,";
+	else outputLine << "PO,";
+	if(m_PSW.carry) outputLine << "C,";
+	else outputLine << "NC,";
+	if(m_PSW.aux_carry) outputLine << "AC";
+	else outputLine << "NAC";
+
+	return std::move(outputLine.str());
+}
