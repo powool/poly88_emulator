@@ -1012,6 +1012,19 @@ void I8080::RunTraces()
 					std::cerr << Disassemble(PC()) << Flags() << std::endl;
 					continue;
 				}
+				if (trace.when == I8080Trace::WHEN_EQUAL &&
+						trace.action == I8080Trace::BREAK_PC &&
+						trace.equal(PC())) {
+
+					if (trace.getActive()) {
+						auto outputLine = Disassemble(PC());
+						std::cout << outputLine << std::endl;
+						Interrupt(7);
+					}
+
+					trace.toggleActive();
+					continue;
+				}
 				break;
 			default:
 				break;
@@ -1035,13 +1048,19 @@ bool I8080::RunEmulatorCommand(const std::vector<std::string> &args)
 		traces.push_back(newTrace);
 		std::cout << "set pc tracing for range (" << std::hex << low << ", " << high << ")." << std::endl;
 	}
-	if (args.size() == 3 && args[0] == "disassemble" || args[0] == "d") {
+	if (args.size() == 3 && (args[0] == "disassemble" || args[0] == "d")) {
 		uint16_t low = std::stoi(args[1], nullptr, 16);
 		uint16_t high = std::stoi(args[2], nullptr, 16);
 		for(uint16_t pc = low; pc < high; pc += InstructionLength(pc)) {
 			auto outputLine = Disassemble(pc);
 			std::cout << outputLine << std::endl;
 		}
+	}
+	if (args.size() == 2 && (args[0] == "break" || args[0] == "b")) {
+		uint16_t pc = std::stoi(args[1], nullptr, 16);
+		I8080Trace newTrace(I8080Trace::PC, I8080Trace::WHEN_EQUAL,I8080Trace::BREAK_PC, pc);
+		traces.push_back(newTrace);
+		std::cout << "set breakpoint for address " << std::hex << pc << std::endl;
 	}
 
 	return false;
