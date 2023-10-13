@@ -14,12 +14,14 @@ public:
 	Poly88();
 	~Poly88();
 
-	const char *Run();
+	bool Run(uint64_t &machineCycle);
 	void Command();
+
+	void ReadStartupFile();
+	bool RunEmulatorCommand(const std::vector<std::string> &args);
 
 	void Debug(bool debug) {
 		m_devices.Debug(debug);
-		I8080::Debug(debug);
 	}
 
 	void LoadROM(const char *filename) { memory.LoadROM(filename); }

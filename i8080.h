@@ -1,10 +1,12 @@
 #pragma once
 
 #include "i8080_types.h"
+#include "i8080_trace.hpp"
 #include "memory.h"
 #include <stdint.h>
 #include <iostream>
 #include <iomanip>
+#include <vector>
 
 typedef uint16_t uint16_t;
 
@@ -14,7 +16,7 @@ class I8080
 {
 
 private:
-	bool m_debug;
+	std::vector<I8080Trace> traces;
 
 	// x86 only:
 	union Register
@@ -153,4 +155,8 @@ public:
 	std::cerr << "m_regSP = " << m_regSP << std::endl;
 	std::cerr << std::setw(0) << std::dec << std::resetiosflags(std::ios::showbase);
 	}
+
+	bool RunEmulatorCommand(const std::vector<std::string> &args);
+	void RunTraces();
+	std::string Disassemble(uint16_t pc);
 };
