@@ -159,4 +159,6 @@ public:
 	bool RunEmulatorCommand(const std::vector<std::string> &args);
 	void RunTraces();
 	std::string Disassemble(uint16_t pc);
+	std::string Flags();
+	int InstructionLength(uint16_t pc);
 };

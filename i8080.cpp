@@ -1022,7 +1022,7 @@ void I8080::RunTraces()
 				if (trace.when == I8080Trace::WHEN_RANGE &&
 						trace.action == I8080Trace::DISASSEMBLY &&
 						trace.inRange(PC())) {
-					std::cerr << Disassemble(PC()) << std::endl;
+					std::cerr << Disassemble(PC()) << Flags() << std::endl;
 					continue;
 				}
 				break;
@@ -1048,6 +1048,14 @@ bool I8080::RunEmulatorCommand(const std::vector<std::string> &args)
 		traces.push_back(newTrace);
 		std::cout << "set pc tracing for range (" << std::hex << low << ", " << high << ")." << std::endl;
 	}
+	if (args.size() == 3 && args[0] == "disassemble" || args[0] == "d") {
+		uint16_t low = std::stoi(args[1], nullptr, 16);
+		uint16_t high = std::stoi(args[2], nullptr, 16);
+		for(uint16_t pc = low; pc < high; pc += InstructionLength(pc)) {
+			auto outputLine = Disassemble(pc);
+			std::cout << outputLine << std::endl;
+		}
+	}
 
 	return false;
 }
@@ -1056,30 +1064,30 @@ std::string I8080::Disassemble(uint16_t pc)
 {
 	std::stringstream outputLine;
 
-	outputLine << util::hex(4) << PC() << "   ";
+	outputLine << util::hex(4) << pc << "   ";
 
 	unsigned char instruction[8];
-	instruction[0] = memory.get_byte(PC());
-	instruction[1] = memory.get_byte(PC()+1);
-	instruction[2] = memory.get_byte(PC()+2);
-	instruction[3] = memory.get_byte(PC()+3);
-	instruction[4] = memory.get_byte(PC()+4);
-	instruction[5] = memory.get_byte(PC()+5);
-	instruction[6] = memory.get_byte(PC()+6);
-	instruction[7] = memory.get_byte(PC()+7);
+	instruction[0] = memory.get_byte(pc);
+	instruction[1] = memory.get_byte(pc+1);
+	instruction[2] = memory.get_byte(pc+2);
+	instruction[3] = memory.get_byte(pc+3);
+	instruction[4] = memory.get_byte(pc+4);
+	instruction[5] = memory.get_byte(pc+5);
+	instruction[6] = memory.get_byte(pc+6);
+	instruction[7] = memory.get_byte(pc+7);
 
 	const unsigned char *in = instruction;
 	char args[64];
 
 	auto z80_instruction_size = z80_disassemble_size(in);
 
-	outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC())) << " ";
+	outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(pc)) << " ";
 	if(z80_instruction_size>1)
-		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC()+1)) << " ";
+		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(pc+1)) << " ";
 	else
 		outputLine << "   ";
 	if(z80_instruction_size>2)
-		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(PC()+2)) << " " ;
+		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(pc+2)) << " " ;
 	else
 		outputLine << "   ";
 
@@ -1093,6 +1101,13 @@ std::string I8080::Disassemble(uint16_t pc)
 	outputLine.width(0);
 	outputLine << std::right;
 
+	return std::move(outputLine.str());
+}
+
+std::string I8080::Flags()
+{
+	std::stringstream outputLine;
+
 	auto tos = memory.get_2byte(SP());
 	outputLine << "a:" << util::hex(2) << static_cast<uint16_t>(A()) << " bc=" << util::hex(4) << BC() << " de=" << util::hex(4) << DE() << " hl=" << util::hex(4) << HL() << " m=" << util::hex(2) << static_cast<uint16_t>(M()) << " sp=" << util::hex(4) << SP() << " *sp=" << tos << "\tpsw=";
 	if(_PSW.zero) outputLine << "Z,";
@@ -1105,4 +1120,23 @@ std::string I8080::Disassemble(uint16_t pc)
 	else outputLine << "NAC";
 
 	return std::move(outputLine.str());
+}
+
+int I8080::InstructionLength(uint16_t pc)
+{
+	unsigned char instruction[8];
+	instruction[0] = memory.get_byte(pc);
+	instruction[1] = memory.get_byte(pc+1);
+	instruction[2] = memory.get_byte(pc+2);
+	instruction[3] = memory.get_byte(pc+3);
+	instruction[4] = memory.get_byte(pc+4);
+	instruction[5] = memory.get_byte(pc+5);
+	instruction[6] = memory.get_byte(pc+6);
+	instruction[7] = memory.get_byte(pc+7);
+
+	const unsigned char *in = instruction;
+	char args[64];
+
+	auto z80_instruction_size = z80_disassemble_size(in);
+	return z80_instruction_size;
 }
