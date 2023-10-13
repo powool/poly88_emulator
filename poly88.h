@@ -5,10 +5,10 @@
 
 class Poly88 : public I8080
 {
-	Devices	m_devices;
-	std::shared_ptr<KeyBoard> m_keyboard;
-	std::shared_ptr<Usart> m_usart;
-	std::shared_ptr<UsartControl> m_usartControl;
+	Devices	devices;
+	std::shared_ptr<KeyBoard> keyboard;
+	std::shared_ptr<Usart> usart;
+	std::shared_ptr<UsartControl> usartControl;
 public:
 
 	Poly88();
@@ -21,7 +21,7 @@ public:
 	bool RunEmulatorCommand(const std::vector<std::string> &args);
 
 	void Debug(bool debug) {
-		m_devices.Debug(debug);
+		devices.Debug(debug);
 	}
 
 	void LoadROM(const char *filename) { memory.LoadROM(filename); }

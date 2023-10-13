@@ -29,17 +29,17 @@ private:
 		uint16_t word;
 	};
 
-	Register m_regBC;
-	Register m_regDE;
-	Register m_regHL;
+	Register regBC;
+	Register regDE;
+	Register regHL;
 
-	uint16_t m_regSP;
-	uint16_t m_regPC;
-	uint16_t m_regPC_breakpoint;
-	uint16_t m_regPC_watchpoint;
-	uint16_t m_watchpoint_location;
+	uint16_t regSP;
+	uint16_t regPC;
+	uint16_t regPC_breakpoint;
+	uint16_t regPC_watchpoint;
+	uint16_t watchpoint_location;
 
-	uint8_t  m_regA;
+	uint8_t  regA;
 
 	struct PSW
 	{
@@ -73,13 +73,13 @@ private:
 		unsigned int sign:1;
 	};
 
-	PSW	m_PSW;
-	PSW m_PSWTable[256];
+	PSW	_PSW;
+	PSW PSWTable[256];
 
-	bool m_halt;
-	bool m_interruptEnable;
+	bool halt;
+	bool interruptEnable;
 
-	int m_singleStepCounter;   // num instructions to interrupt (for single step)
+	int singleStepCounter;   // num instructions to interrupt (for single step)
 
 public:
 
@@ -89,70 +89,70 @@ public:
 	~I8080();
 	void DumpState() const;
 
-	void Reset() { m_regPC = 0; }
+	void Reset() { regPC = 0; }
 
 	int ExecuteCycle(Devices *);
 	bool Interrupt(int interruptVector);
 
-	bool Halt() const {return m_halt;}
-	bool Halt(bool h) {m_halt = h ; return m_halt;}
+	bool Halt() const {return halt;}
+	bool Halt(bool h) {halt = h ; return halt;}
 
-	bool InterruptEnable() const { return m_interruptEnable; }
-	bool InterruptEnable(bool b) { m_interruptEnable = b; return m_interruptEnable; }
+	bool InterruptEnable() const { return interruptEnable; }
+	bool InterruptEnable(bool b) { interruptEnable = b; return interruptEnable; }
 
-	uint8_t PSW() const { return m_PSW.Get(); }
-	uint8_t PSW(uint8_t b) { m_PSW.Set(b); return PSW();}
+	uint8_t PSW() const { return _PSW.Get(); }
+	uint8_t PSW(uint8_t b) { _PSW.Set(b); return PSW();}
 
-	uint8_t A() const { return m_regA; }
-	uint8_t A(uint8_t b) { m_regA = b; return m_regA; }
+	uint8_t A() const { return regA; }
+	uint8_t A(uint8_t b) { regA = b; return regA; }
 
-	uint8_t B() const { return m_regBC.byte.h; }
-	uint8_t B(uint8_t b) { m_regBC.byte.h = b; return B(); }
+	uint8_t B() const { return regBC.byte.h; }
+	uint8_t B(uint8_t b) { regBC.byte.h = b; return B(); }
 
-	uint8_t C() const { return m_regBC.byte.l; }
-	uint8_t C(uint8_t b) { m_regBC.byte.l = b; return C(); }
+	uint8_t C() const { return regBC.byte.l; }
+	uint8_t C(uint8_t b) { regBC.byte.l = b; return C(); }
 
-	uint8_t D() const { return m_regDE.byte.h; }
-	uint8_t D(uint8_t b) { m_regDE.byte.h = b; return D(); }
+	uint8_t D() const { return regDE.byte.h; }
+	uint8_t D(uint8_t b) { regDE.byte.h = b; return D(); }
 
-	uint8_t E() const { return m_regDE.byte.l; }
-	uint8_t E(uint8_t b) { m_regDE.byte.l = b; return E(); }
+	uint8_t E() const { return regDE.byte.l; }
+	uint8_t E(uint8_t b) { regDE.byte.l = b; return E(); }
 
-	uint8_t H() const { return m_regHL.byte.h; }
-	uint8_t H(uint8_t b) { m_regHL.byte.h = b; return H(); }
+	uint8_t H() const { return regHL.byte.h; }
+	uint8_t H(uint8_t b) { regHL.byte.h = b; return H(); }
 
-	uint8_t L() const { return m_regHL.byte.l; }
-	uint8_t L(uint8_t b) { m_regHL.byte.l = b; return L(); }
+	uint8_t L() const { return regHL.byte.l; }
+	uint8_t L(uint8_t b) { regHL.byte.l = b; return L(); }
 
-	uint8_t M() const { return memory.get_byte(m_regHL.word); }
-	uint8_t M(uint8_t b) { memory.set_byte(m_regHL.word,b); return M();}
+	uint8_t M() const { return memory.get_byte(regHL.word); }
+	uint8_t M(uint8_t b) { memory.set_byte(regHL.word,b); return M();}
 
-	uint16_t SP() const { return m_regSP; }
-	uint16_t SP(uint16_t a) { m_regSP = a; return SP(); }
+	uint16_t SP() const { return regSP; }
+	uint16_t SP(uint16_t a) { regSP = a; return SP(); }
 
-	uint16_t PC() const { return m_regPC; }
-	uint16_t PC(uint16_t a) { m_regPC = a; return PC();}
+	uint16_t PC() const { return regPC; }
+	uint16_t PC(uint16_t a) { regPC = a; return PC();}
 
-	uint16_t BC() const { return m_regBC.word; }
-	uint16_t BC(uint16_t a) { m_regBC.word = a; return BC(); }
+	uint16_t BC() const { return regBC.word; }
+	uint16_t BC(uint16_t a) { regBC.word = a; return BC(); }
 
-	uint16_t DE() const { return m_regDE.word; }
-	uint16_t DE(uint16_t a) { m_regDE.word = a; return DE(); }
+	uint16_t DE() const { return regDE.word; }
+	uint16_t DE(uint16_t a) { regDE.word = a; return DE(); }
 
-	uint16_t HL() const { return m_regHL.word; }
-	uint16_t HL(uint16_t a) { m_regHL.word = a; return HL(); }
+	uint16_t HL() const { return regHL.word; }
+	uint16_t HL(uint16_t a) { regHL.word = a; return HL(); }
 
 	void Dump()
 	{
 	std::cerr << std::hex << std::showbase;
 
 	std::cerr << std::setw(6);
-	std::cerr << " m_regA = " << m_regA << std::endl;
-	std::cerr << "m_regBC = " << m_regBC.word << std::endl;
-	std::cerr << "m_regDE = " << m_regDE.word << std::endl;
-	std::cerr << "m_regHL = " << m_regHL.word << std::endl;
-	std::cerr << "m_regPC = " << m_regPC << std::endl;
-	std::cerr << "m_regSP = " << m_regSP << std::endl;
+	std::cerr << " regA = " << regA << std::endl;
+	std::cerr << "regBC = " << regBC.word << std::endl;
+	std::cerr << "regDE = " << regDE.word << std::endl;
+	std::cerr << "regHL = " << regHL.word << std::endl;
+	std::cerr << "regPC = " << regPC << std::endl;
+	std::cerr << "regSP = " << regSP << std::endl;
 	std::cerr << std::setw(0) << std::dec << std::resetiosflags(std::ios::showbase);
 	}
 

@@ -4458,7 +4458,7 @@ void Cvdi_font::setSurface(uint32_t index, const char **xpm)
 
         auto surface = IMG_ReadXPMFromArray(scaled);
 
-        textures[index] = SDL_CreateTextureFromSurface(m_renderer, surface);
+        textures[index] = SDL_CreateTextureFromSurface(renderer, surface);
 		if(textures[index] == NULL)
 		{
 			throw std::runtime_error(std::string("failed to open create texture: ") + SDL_GetError());
@@ -4472,16 +4472,15 @@ void Cvdi_font::setSurface(uint32_t index, const char **xpm)
         delete scaledXPM;
 #else
         auto surface = IMG_ReadXPMFromArray((char **) xpm);
-        textures[index] = SDL_CreateTextureFromSurface(m_renderer, surface);
+        textures[index] = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_FreeSurface(surface);
 #endif
-        SDL_QueryTexture(textures[index], NULL, NULL, &m_width, &m_height);
+        SDL_QueryTexture(textures[index], NULL, NULL, &_width, &_height);
     }
 }
 
-Cvdi_font::Cvdi_font(SDL_Renderer *renderer)
+Cvdi_font::Cvdi_font(SDL_Renderer *_renderer) : renderer(_renderer)
 {
-    m_renderer = renderer;
     for(uint32_t i = 0 ; i<256; i++)
     {
         setSurface(i, NULL);

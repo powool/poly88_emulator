@@ -44,16 +44,16 @@ void Memory::LoadROM(const char *name)
         switch(item_cnt)
         {
             case 1:
-                m_rom[addr++] = v1;
+                rom[addr++] = v1;
                 break;
             case 2:
-                m_rom[addr++] = v1;
-                m_rom[addr++] = v2;
+                rom[addr++] = v1;
+                rom[addr++] = v2;
                 break;
             case 3:
-                m_rom[addr++] = v1;
-                m_rom[addr++] = v2;
-                m_rom[addr++] = v3;
+                rom[addr++] = v1;
+                rom[addr++] = v2;
+                rom[addr++] = v3;
                 break;
             default:
                 fprintf(stderr,"eeeeewwww icky!!! you got the wrong # of bytes at addr %04x.\n",
@@ -79,7 +79,7 @@ void Memory::LoadRAM(const char *name)
 	int ch;
 	while((ch = fgetc(stream)) != EOF)
 	{
-		m_ram[address++] = ch;
+		ram[address++] = ch;
 	}
 }
 
@@ -109,15 +109,15 @@ Memory::~Memory()
 byte_t& Memory::operator[](i8080_addr_t i)
 {
     if(debug) std::cout << "reading byte at address " << i << "\n";
-    return m_ram[i];
+    return ram[i];
 }
 
 void Memory::set_byte(i8080_addr_t a, byte_t v)
 {
     if(a<rom_end) return;
-	if(a >= m_guardLow && a<m_guardHigh) return;
+	if(a >= guardLow && a<guardHigh) return;
 
-    m_ram[a] = v;
+    ram[a] = v;
     if(a>=0xf800)
     {
         int row = (a >> 6) & 0xf;
@@ -135,28 +135,28 @@ void Memory::set_byte(i8080_addr_t a, byte_t v)
 void Memory::set_2byte(i8080_addr_t a, i8080_addr_t v)
 {
     if(a<rom_end) return;
-	if(a >= m_guardLow && a < m_guardHigh) return;
-    m_ram[a] = (v&0xff);
-    m_ram[a+1] = ((v>>8)&0xff);
+	if(a >= guardLow && a < guardHigh) return;
+    ram[a] = (v&0xff);
+    ram[a+1] = ((v>>8)&0xff);
     if(a>=0xf800)
     {
-        set_byte(a, m_ram[a]);
-        set_byte(a+1, m_ram[a+1]);
+        set_byte(a, ram[a]);
+        set_byte(a+1, ram[a+1]);
     }
 }
 
 byte_t Memory::get_byte(i8080_addr_t a) const
 {
-    if(a<rom_end) return m_rom[a];
-	if(a >= m_guardLow && a < m_guardHigh) return 0xff;
-    return m_ram[a];
+    if(a<rom_end) return rom[a];
+	if(a >= guardLow && a < guardHigh) return 0xff;
+    return ram[a];
 }
 
 i8080_addr_t Memory::get_2byte(i8080_addr_t a) const
 {
-    if(a<rom_end) return (m_rom[a+1]<<8) + m_rom[a];
-	if(a >= m_guardLow && a < m_guardHigh) return 0xffff;
-    return (m_ram[a+1]<<8) + m_ram[a];
+    if(a<rom_end) return (rom[a+1]<<8) + rom[a];
+	if(a >= guardLow && a < guardHigh) return 0xffff;
+    return (ram[a+1]<<8) + ram[a];
 }
 
 void Memory::redraw_screen()

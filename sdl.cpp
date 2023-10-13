@@ -8,7 +8,7 @@
 Csdl::Csdl()
 {
     window = NULL;
-    m_renderer = NULL;
+    _renderer = NULL;
 	window_width = 100;
 	window_height = 100;
 }
@@ -20,10 +20,10 @@ Csdl::~Csdl()
 
 int Csdl::close()
 {
-    SDL_DestroyRenderer(m_renderer);
+    SDL_DestroyRenderer(_renderer);
     SDL_DestroyWindow(window);
     window = NULL;
-    m_renderer = NULL;
+    _renderer = NULL;
     if(--sdl_reference_count == 0) SDL_Quit();
     return 0;
 }
@@ -49,8 +49,8 @@ int Csdl::open()
         return 1;
     }
 
-    m_renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    if(m_renderer==NULL)
+    _renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if(_renderer==NULL)
     {
         fprintf(stderr, "Unable to set %dx%d video: %s\n", window_width, window_height, SDL_GetError());
         return 1;
@@ -75,8 +75,8 @@ void Csdl::rectangle(
     int green,
     int blue)
 {
-	m_needsUpdate = true;
-	SDL_SetRenderDrawColor(m_renderer, red, green, blue, SDL_ALPHA_OPAQUE);
+	needsUpdate = true;
+	SDL_SetRenderDrawColor(_renderer, red, green, blue, SDL_ALPHA_OPAQUE);
 
     SDL_Rect foo;
     foo.x = x;
@@ -84,29 +84,29 @@ void Csdl::rectangle(
     foo.w = x_size;
     foo.h = y_size;
 
-    SDL_RenderFillRect(m_renderer, &foo);
+    SDL_RenderFillRect(_renderer, &foo);
 }
 
 void Csdl::put_pixel(int x, int y, int red, int green, int blue)
 {
-	m_needsUpdate = true;
-	SDL_SetRenderDrawColor(m_renderer, red, green, blue, SDL_ALPHA_OPAQUE);
-	SDL_RenderDrawPoint(m_renderer, x, y);
+	needsUpdate = true;
+	SDL_SetRenderDrawColor(_renderer, red, green, blue, SDL_ALPHA_OPAQUE);
+	SDL_RenderDrawPoint(_renderer, x, y);
 }
 
 int Csdl::blit2screen(SDL_Texture *src, SDL_Rect &dstrect)
 {
-	m_needsUpdate = true;
-    return SDL_RenderCopy(m_renderer, src, NULL, &dstrect);
+	needsUpdate = true;
+    return SDL_RenderCopy(_renderer, src, NULL, &dstrect);
 }
 
 
 void Csdl::update()
 {
-	if(m_needsUpdate)
+	if(needsUpdate)
 	{
-		SDL_RenderPresent(m_renderer);
-		m_needsUpdate = false;
+		SDL_RenderPresent(_renderer);
+		needsUpdate = false;
 	}
 }
 

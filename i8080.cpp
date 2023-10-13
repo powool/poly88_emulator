@@ -18,9 +18,9 @@ I8080::I8080()
 	// possible byte value.
 	for(i=0; i<256; i++)
 	{
-		m_PSWTable[i].zero = (i == 0);
+		PSWTable[i].zero = (i == 0);
 
-		m_PSWTable[i].sign = (i >= 0x80);
+		PSWTable[i].sign = (i >= 0x80);
 
 		ringsum = 0;
 		val = i;
@@ -29,12 +29,12 @@ I8080::I8080()
 			ringsum ^= (val & 0x01);
 			val = val>>1;
 		}
-		m_PSWTable[i].parity = (~ringsum) & 0x01;
+		PSWTable[i].parity = (~ringsum) & 0x01;
 	}
 
-	m_regPC_breakpoint = 0x0;
-	m_regPC_watchpoint = 0;
-	m_watchpoint_location = 0x0c0e;
+	regPC_breakpoint = 0x0;
+	regPC_watchpoint = 0;
+	watchpoint_location = 0x0c0e;
 }
 
 I8080::~I8080()
@@ -85,11 +85,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = r(); \
 			tword1 = tbyte1+tbyte2; \
 			A((uint8_t) tword1); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = ( (tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf); \
-			m_PSW.carry = (tword1 > 0xff); \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = ( (tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf); \
+			_PSW.carry = (tword1 > 0xff); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -97,13 +97,13 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode: \
 			tbyte1 = A(); \
 			tbyte2 = r(); \
-			tword1 = tbyte1+tbyte2 + m_PSW.carry; \
+			tword1 = tbyte1+tbyte2 + _PSW.carry; \
 			A((uint8_t) tword1); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = ( m_PSW.carry + (tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf); \
-			m_PSW.carry = (tword1 > 0xff); \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = ( _PSW.carry + (tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf); \
+			_PSW.carry = (tword1 > 0xff); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -114,11 +114,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = r(); \
 			tmp8 = tbyte1 - tbyte2; \
 			A(tmp8); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) ); \
-			m_PSW.carry = (tbyte1 < tbyte2); \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) ); \
+			_PSW.carry = (tbyte1 < tbyte2); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -126,13 +126,13 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode: \
 			tbyte1 = A(); \
 			tbyte2 = r(); \
-			tword1 = tbyte1 - tbyte2 - m_PSW.carry; \
+			tword1 = tbyte1 - tbyte2 - _PSW.carry; \
 			A((uint8_t) tword1); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) + m_PSW.carry); \
-			m_PSW.carry = (tbyte1 < (tbyte2+m_PSW.carry)); \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) + _PSW.carry); \
+			_PSW.carry = (tbyte1 < (tbyte2+_PSW.carry)); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -142,11 +142,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = r(); \
 			tmp8 = tbyte1 & tbyte2; \
 			A(tmp8); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = ((tbyte1 | tbyte2) & 0x08) != 0; \
-			m_PSW.carry = 0; \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = ((tbyte1 | tbyte2) & 0x08) != 0; \
+			_PSW.carry = 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -156,11 +156,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = r(); \
 			tmp8 = tbyte1 ^ tbyte2; \
 			A(tmp8); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = 0; \
-			m_PSW.carry = 0; \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = 0; \
+			_PSW.carry = 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -170,11 +170,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = r(); \
 			tmp8 = tbyte1 | tbyte2; \
 			A(tmp8); \
-			m_PSW.zero = m_PSWTable[A()].zero; \
-			m_PSW.sign = m_PSWTable[A()].sign; \
-			m_PSW.parity = m_PSWTable[A()].parity; \
-			m_PSW.aux_carry = 0; \
-			m_PSW.carry = 0; \
+			_PSW.zero = PSWTable[A()].zero; \
+			_PSW.sign = PSWTable[A()].sign; \
+			_PSW.parity = PSWTable[A()].parity; \
+			_PSW.aux_carry = 0; \
+			_PSW.carry = 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -183,11 +183,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte1 = A(); \
 			tbyte2 = r(); \
 			tmp8 = tbyte1 - tbyte2; \
-			m_PSW.zero = m_PSWTable[tmp8].zero; \
-			m_PSW.sign = m_PSWTable[tmp8].sign; \
-			m_PSW.parity = m_PSWTable[tmp8].parity; \
-			m_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) ); \
-			m_PSW.carry = (tbyte1 < tbyte2); \
+			_PSW.zero = PSWTable[tmp8].zero; \
+			_PSW.sign = PSWTable[tmp8].sign; \
+			_PSW.parity = PSWTable[tmp8].parity; \
+			_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) ); \
+			_PSW.carry = (tbyte1 < tbyte2); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -213,10 +213,10 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode:    /* INR r */ \
 			tbyte1 = r(); \
 			r(r() + 1); \
-			m_PSW.zero = m_PSWTable[r()].zero; \
-			m_PSW.sign = m_PSWTable[r()].sign; \
-			m_PSW.parity = m_PSWTable[r()].parity; \
-			m_PSW.aux_carry = (tbyte1 & 0xf) == 0xf; \
+			_PSW.zero = PSWTable[r()].zero; \
+			_PSW.sign = PSWTable[r()].sign; \
+			_PSW.parity = PSWTable[r()].parity; \
+			_PSW.aux_carry = (tbyte1 & 0xf) == 0xf; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -224,10 +224,10 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode:    /* DCR r */ \
 			tbyte1 = r(); \
 			r(r() - 1); \
-			m_PSW.zero = m_PSWTable[r()].zero; \
-			m_PSW.sign = m_PSWTable[r()].sign; \
-			m_PSW.parity = m_PSWTable[r()].parity; \
-			m_PSW.aux_carry = ((tbyte1 & 0xf) == 0); \
+			_PSW.zero = PSWTable[r()].zero; \
+			_PSW.sign = PSWTable[r()].sign; \
+			_PSW.parity = PSWTable[r()].parity; \
+			_PSW.aux_carry = ((tbyte1 & 0xf) == 0); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -241,7 +241,7 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode:    /* DAD rp */ \
 			tmp16 = HL(); \
 			HL(HL() + rp()); \
-			m_PSW.carry = (HL() < tmp16); \
+			_PSW.carry = (HL() < tmp16); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -263,16 +263,16 @@ int I8080::ExecuteCycle(Devices *dev)
 			PC(n*8); \
 			return 0;
 
-	if(m_singleStepCounter > 0 && --m_singleStepCounter == 0) Interrupt(7);
+	if(singleStepCounter > 0 && --singleStepCounter == 0) Interrupt(7);
 	RunTraces();
-	if(m_regPC_breakpoint && m_regPC_breakpoint==PC())
+	if(regPC_breakpoint && regPC_breakpoint==PC())
 	{
 		std::cerr << "got to breakpoint at pc=0x" << util::hex(4) << PC() << std::endl;
 	}
-	if(m_regPC_watchpoint && m_regPC_watchpoint==PC())
+	if(regPC_watchpoint && regPC_watchpoint==PC())
 	{
-		tmp16 = memory.get_2byte(m_watchpoint_location);
-		std::cout << "at watchpoint 0x" << util::hex(4) << m_regPC_watchpoint << ", location 0x" << m_watchpoint_location << "=0x" << tmp16 << "\n";
+		tmp16 = memory.get_2byte(watchpoint_location);
+		std::cout << "at watchpoint 0x" << util::hex(4) << regPC_watchpoint << ", location 0x" << watchpoint_location << "=0x" << tmp16 << "\n";
 	}
 
 	// decode instruction and execute it
@@ -298,9 +298,9 @@ int I8080::ExecuteCycle(Devices *dev)
 			MVI_R(0x06, B);
 
 		case 0x07:  /* RLC */
-			m_PSW.carry = (A() >> 7) & 1;
+			_PSW.carry = (A() >> 7) & 1;
 			A(A() << 1);
-			A(A() | m_PSW.carry);
+			A(A() | _PSW.carry);
 			PC(PC() + 1);
 			return 0;
 
@@ -312,9 +312,9 @@ int I8080::ExecuteCycle(Devices *dev)
 			MVI_R(0x0e, C);
 
 		case 0x0f:  /* RRC */
-			m_PSW.carry = A() & 1;
+			_PSW.carry = A() & 1;
 			A(A() >> 1);
-			A(A() | (m_PSW.carry << 7));
+			A(A() | (_PSW.carry << 7));
 			PC(PC() + 1);
 			return 0;
 
@@ -329,8 +329,8 @@ int I8080::ExecuteCycle(Devices *dev)
 		case 0x17:  /* RAL */
 			tmp8 = (A() >> 7) & 1;  // hold high bit
 			A(A() << 1);
-			A(A() | (m_PSW.carry));
-			m_PSW.carry = tmp8;
+			A(A() | (_PSW.carry));
+			_PSW.carry = tmp8;
 			PC(PC() + 1);
 			return 0;
 
@@ -344,8 +344,8 @@ int I8080::ExecuteCycle(Devices *dev)
 		case 0x1f:  /* RAR */
 			tmp8 = A() & 1;   /* save low order bit */
 			A(A() >> 1);
-			A(A() | (m_PSW.carry << 7));
-			m_PSW.carry = tmp8;
+			A(A() | (_PSW.carry << 7));
+			_PSW.carry = tmp8;
 			PC(PC() + 1);
 			return 0;
 
@@ -362,19 +362,19 @@ int I8080::ExecuteCycle(Devices *dev)
 			MVI_R(0x26, H);
 
 		case 0x27:  /* DAA */
-			if(m_PSW.aux_carry || (A() & 0xf)>9)
+			if(_PSW.aux_carry || (A() & 0xf)>9)
 			{
 				A(A() + 6);
-				m_PSW.aux_carry = 1;
+				_PSW.aux_carry = 1;
 			}
-			if(m_PSW.carry || (A() >> 4) > 9 || ((A() >> 4) >= 9 && (A() & 0x0f) > 9))
+			if(_PSW.carry || (A() >> 4) > 9 || ((A() >> 4) >= 9 && (A() & 0x0f) > 9))
 			{
 				A(A() + 0x60);
-				m_PSW.carry = 1;
+				_PSW.carry = 1;
 			}
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
 			PC(PC() + 1);
 			return 0;
 
@@ -408,7 +408,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			MVI_R(0x36, M);
 
 		case 0x37:  /* STC */
-			m_PSW.carry = 1;
+			_PSW.carry = 1;
 			PC(PC() + 1);
 			return 0;
 
@@ -425,7 +425,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			MVI_R(0x3e, A);
 
 		case 0x3f:  /* CMC */
-			m_PSW.carry = !m_PSW.carry;
+			_PSW.carry = !_PSW.carry;
 			PC(PC() + 1);
 			return 0;
 
@@ -579,7 +579,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			CMP_R(0xbf, A);
 
 		case 0xc0:  /* RNZ */
-			if(!m_PSW.zero) PC(POP());
+			if(!_PSW.zero) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -589,7 +589,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xc2:  /* JNZ xxxx */
-			if(!m_PSW.zero) PC(IMMEDIATE_2BYTE());
+			if(!_PSW.zero) PC(IMMEDIATE_2BYTE());
 			else PC(PC() + 3);
 			return 0;
 
@@ -599,7 +599,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xc4:  /* CNZ xxxx */
-			if(!m_PSW.zero)
+			if(!_PSW.zero)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -617,17 +617,17 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = IMMEDIATE_BYTE();
 			tword1 = tbyte1+tbyte2;
 			A((uint8_t) tword1);
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.aux_carry = ((tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf);
-			m_PSW.carry = (tword1 > 0xff);
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.aux_carry = ((tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf);
+			_PSW.carry = (tword1 > 0xff);
 			PC(PC() + 2);
 			return 0;
 
 			RST(0xc7,0);
 		case 0xc8:  /* RZ */
-			if(m_PSW.zero) PC(POP());
+			if(_PSW.zero) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -637,7 +637,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xca:  /* JZ xxxx */
-			if(m_PSW.zero) PC(IMMEDIATE_2BYTE());
+			if(_PSW.zero) PC(IMMEDIATE_2BYTE());
 			else PC(PC() + 3);
 			return 0;
 
@@ -647,7 +647,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xcc:  /* CZ xxxx */
-			if(m_PSW.zero)
+			if(_PSW.zero)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -666,20 +666,20 @@ int I8080::ExecuteCycle(Devices *dev)
 		case 0xce:  /* ACI xx */
 			tbyte1 = A();
 			tbyte2 = IMMEDIATE_BYTE();
-			tword1 = tbyte1 + tbyte2 + m_PSW.carry;
+			tword1 = tbyte1 + tbyte2 + _PSW.carry;
 			A((uint8_t) tword1);
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.aux_carry = ((tword1 & 0xf) > 0xf);
-			m_PSW.carry = (tword1 > 0xff);
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.aux_carry = ((tword1 & 0xf) > 0xf);
+			_PSW.carry = (tword1 > 0xff);
 			PC(PC() + 2);
 			return 0;
 
 			RST(0xcf,1);
 
 		case 0xd0:  /* RNC */
-			if(!m_PSW.carry) PC(POP());
+			if(!_PSW.carry) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -689,7 +689,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xd2:  /* JNC xxxx */
-			if(!m_PSW.carry) PC(IMMEDIATE_2BYTE());
+			if(!_PSW.carry) PC(IMMEDIATE_2BYTE());
 			else PC(PC() + 3);
 			return 0;
 
@@ -704,14 +704,14 @@ int I8080::ExecuteCycle(Devices *dev)
 			}
 #endif
 			if(tmp8==12)
-				m_singleStepCounter = 3;   // port 12 initializes SS interrupt
+				singleStepCounter = 3;   // port 12 initializes SS interrupt
 			else
 				dev->OutputTo(tmp8, A());
 			PC(PC() + 2);
 			return 0;
 
 		case 0xd4:  /* CNC xxxx */
-			if(!m_PSW.carry)
+			if(!_PSW.carry)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -729,18 +729,18 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = IMMEDIATE_BYTE();
 			tmp8 = tbyte1 - tbyte2;
 			A(tmp8);
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf));
-			m_PSW.carry = (tbyte1 < tbyte2);
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf));
+			_PSW.carry = (tbyte1 < tbyte2);
 			PC(PC() + 2);
 			return 0;
 
 			RST(0xd7,2);
 
 		case 0xd8:  /* RC */
-			if(m_PSW.carry) PC(POP());
+			if(_PSW.carry) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -750,7 +750,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xda:  /* JC xxxx */
-			if(m_PSW.carry) PC(IMMEDIATE_2BYTE());
+			if(_PSW.carry) PC(IMMEDIATE_2BYTE());
 			else PC(PC() + 3);
 			return 0;
 
@@ -761,7 +761,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xdc:  /* CC xxxx */
-			if(m_PSW.carry)
+			if(_PSW.carry)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -777,20 +777,20 @@ int I8080::ExecuteCycle(Devices *dev)
 		case 0xde:  /* SBI xx */
 			tbyte1 = A();
 			tbyte2 = IMMEDIATE_BYTE();
-			tword1 = tbyte1 - tbyte2 - m_PSW.carry;
+			tword1 = tbyte1 - tbyte2 - _PSW.carry;
 			A((uint8_t) tword1);
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf + m_PSW.carry));
-			m_PSW.carry = (tbyte1 < (tbyte2+m_PSW.carry));
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf + _PSW.carry));
+			_PSW.carry = (tbyte1 < (tbyte2+_PSW.carry));
 			PC(PC()+2);
 			return 0;
 
 			RST(0xdf,3);
 
 		case 0xe0:  /* RPO */
-			if(!m_PSW.parity) PC(POP());
+			if(!_PSW.parity) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -800,7 +800,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xe2:  /* JPO xxxx */
-			if(!m_PSW.parity) PC(IMMEDIATE_2BYTE());
+			if(!_PSW.parity) PC(IMMEDIATE_2BYTE());
 			else PC(PC() + 3);
 			return 0;
 
@@ -812,7 +812,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xe4:  /* CPO xxxx */
-			if(!m_PSW.parity)
+			if(!_PSW.parity)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -827,18 +827,18 @@ int I8080::ExecuteCycle(Devices *dev)
 
 		case 0xe6:  /* ANI xx */
 			A(A() & IMMEDIATE_BYTE());
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.carry = 0;
-			m_PSW.aux_carry = 0;
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.carry = 0;
+			_PSW.aux_carry = 0;
 			PC(PC() + 2);
 			return 0;
 
 			RST(0xe7,4);
 
 		case 0xe8:  /* RPE */
-			if(m_PSW.parity) PC(POP());
+			if(_PSW.parity) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -849,7 +849,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xea:  /* JPE xxxx */
-			if(m_PSW.parity) PC(IMMEDIATE_2BYTE());
+			if(_PSW.parity) PC(IMMEDIATE_2BYTE());
 			else PC(PC() + 3);
 			return 0;
 
@@ -861,7 +861,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xec:  /* CPE xxxx */
-			if(m_PSW.parity)
+			if(_PSW.parity)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -876,30 +876,30 @@ int I8080::ExecuteCycle(Devices *dev)
 
 		case 0xee:  /* XRI xx */
 			A(A() ^ IMMEDIATE_BYTE());
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.carry = 0;
-			m_PSW.aux_carry = 0;
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.carry = 0;
+			_PSW.aux_carry = 0;
 			PC(PC() + 2);
 			return 0;
 
 			RST(0xef,5);
 
 		case 0xf0:  /* RP */
-			if(!m_PSW.sign) PC(POP());
+			if(!_PSW.sign) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
 		case 0xf1:  /* POP PSW */
 			tmp16 = POP();
-			m_PSW.Set(tmp16 & 0xff);
+			_PSW.Set(tmp16 & 0xff);
 			A((uint8_t)(tmp16 >> 8));
 			PC(PC() + 1);
 			return 0;
 
 		case 0xf2:  /* JP xxxx */
-			if(!m_PSW.sign)
+			if(!_PSW.sign)
 			{
 				PC(IMMEDIATE_2BYTE());
 				return 0;
@@ -913,7 +913,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xf4:  /* CP xxxx */
-			if(!m_PSW.sign)
+			if(!_PSW.sign)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -923,7 +923,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xf5:  /* PUSH PSW */
-			tmp16 = (A() << 8) | m_PSW.Get();
+			tmp16 = (A() << 8) | _PSW.Get();
 			PUSH(tmp16);
 			PC(PC() + 1);
 			return 0;
@@ -933,17 +933,17 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte2 = IMMEDIATE_BYTE();
 			tmp8 = tbyte1 | tbyte2;
 			A(tmp8);
-			m_PSW.zero = m_PSWTable[A()].zero;
-			m_PSW.sign = m_PSWTable[A()].sign;
-			m_PSW.parity = m_PSWTable[A()].parity;
-			m_PSW.carry = 0;
+			_PSW.zero = PSWTable[A()].zero;
+			_PSW.sign = PSWTable[A()].sign;
+			_PSW.parity = PSWTable[A()].parity;
+			_PSW.carry = 0;
 			PC(PC() + 2);
 			return 0;
 
 			RST(0xf7,6);
 
 		case 0xf8:  /* RM */
-			if(m_PSW.sign) PC(POP());
+			if(_PSW.sign) PC(POP());
 			else PC(PC() + 1);
 			return 0;
 
@@ -953,7 +953,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xfa:  /* JM xxxx */
-			if(m_PSW.sign)
+			if(_PSW.sign)
 				PC(IMMEDIATE_2BYTE());
 			else
 				PC(PC() + 3);
@@ -965,7 +965,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xfc:  /* CM xxxx */
-			if(m_PSW.sign)
+			if(_PSW.sign)
 			{
 				PUSH(PC()+3);
 				PC(IMMEDIATE_2BYTE());
@@ -982,11 +982,11 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte1 = A();
 			tbyte2 = IMMEDIATE_BYTE();
 			tmp8 = tbyte1 - tbyte2;
-			m_PSW.zero = m_PSWTable[tmp8].zero;
-			m_PSW.sign = m_PSWTable[tmp8].sign;
-			m_PSW.parity = m_PSWTable[tmp8].parity;
-			m_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf));
-			m_PSW.carry = (tbyte1 < tbyte2);
+			_PSW.zero = PSWTable[tmp8].zero;
+			_PSW.sign = PSWTable[tmp8].sign;
+			_PSW.parity = PSWTable[tmp8].parity;
+			_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf));
+			_PSW.carry = (tbyte1 < tbyte2);
 			PC(PC() + 2);
 			return 0;
 
@@ -1095,13 +1095,13 @@ std::string I8080::Disassemble(uint16_t pc)
 
 	auto tos = memory.get_2byte(SP());
 	outputLine << "a:" << util::hex(2) << static_cast<uint16_t>(A()) << " bc=" << util::hex(4) << BC() << " de=" << util::hex(4) << DE() << " hl=" << util::hex(4) << HL() << " m=" << util::hex(2) << static_cast<uint16_t>(M()) << " sp=" << util::hex(4) << SP() << " *sp=" << tos << "\tpsw=";
-	if(m_PSW.zero) outputLine << "Z,";
+	if(_PSW.zero) outputLine << "Z,";
 	else outputLine << "NZ,";
-	if(m_PSW.parity) outputLine << "PE,";
+	if(_PSW.parity) outputLine << "PE,";
 	else outputLine << "PO,";
-	if(m_PSW.carry) outputLine << "C,";
+	if(_PSW.carry) outputLine << "C,";
 	else outputLine << "NC,";
-	if(m_PSW.aux_carry) outputLine << "AC";
+	if(_PSW.aux_carry) outputLine << "AC";
 	else outputLine << "NAC";
 
 	return std::move(outputLine.str());
