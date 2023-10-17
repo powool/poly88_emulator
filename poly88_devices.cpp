@@ -117,6 +117,46 @@ bool KeyBoard::Poll()
 	return false;
 }
 
+bool KeyBoard::RunEmulatorCommand(const std::vector<std::string> &args)
+{
+	if (args[0] == "keyboard" || args[0] == "k") {
+		for (int i = 1; i < args.size(); i++) {
+			bool backslash = false;
+			for (auto ch: args[i]) {
+				if (ch == '\\') {
+					backslash = true;
+					continue;
+				}
+				if (backslash) {
+					switch(ch) {
+						case 'n':
+							ch = '\n';
+							break;
+						case 'r':
+							ch = '\r';
+							break;
+						case 't':
+							ch = '\t';
+							break;
+						default:
+							backslash = false;
+							continue;
+					}
+					backslash = false;
+					continue;
+				}
+				std::cout << "wrote to keyboard: " << ch << std::endl;
+				keys.push(ch);
+			}
+		}
+		if(keys.size())
+			SetInterruptPending(true);
+		return false;
+	}
+
+	return false;
+}
+
 Timer::Timer(I8080 &i8080, Devices &devices) :
 	Device(i8080, devices)
 {
