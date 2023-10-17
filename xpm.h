@@ -18,16 +18,18 @@ class XPM
     {
         width = height = bitplanes = -1;
     }
+    void Set(const char **xpm);
 public:
     XPM();
     XPM(const char **xpm);
-    void Set(const char **xpm);
 
     ~XPM();
 
-    XPM *CreateNew(uint32_t gap, uint32_t widthScale, uint32_t heightScale);
+    XPM *CloneNewScaled(uint32_t gap, uint32_t widthScale, uint32_t heightScale);
     // returns a correctly formed XPM
-    char **GetXPM();
+    char **GetCStyleXPM();
+	// delete the C style XPM created above
+	void DeleteCStyleXPM(char **scaled);
 };
 
 
@@ -72,7 +74,8 @@ inline XPM::~XPM()
 {
 }
 
-inline char **XPM::GetXPM()
+// return C style XPM representation used by IMG_ReadXPMFromArray()
+inline char **XPM::GetCStyleXPM()
 {
     // header plus # colors, # height in pixels + final NULL
     char **newXPM = new char *[1 + colors.size() + height + 1];
@@ -95,7 +98,13 @@ inline char **XPM::GetXPM()
     return newXPM;
 }
 
-inline XPM *XPM::CreateNew(uint32_t gap, uint32_t widthScale, uint32_t heightScale)
+inline void XPM::DeleteCStyleXPM(char **scaled)
+{
+	for(int i=0; scaled[i] ; i++) free(scaled[i]);
+	free(scaled);
+}
+
+inline XPM *XPM::CloneNewScaled(uint32_t gap, uint32_t widthScale, uint32_t heightScale)
 {
     XPM *newXPM = new XPM();
 
