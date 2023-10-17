@@ -30,6 +30,8 @@ int Csdl::close()
 
 void Csdl::set_size(int window_width, int window_height)
 {
+	this->window_width = window_width;
+	this->window_height = window_height;
     SDL_SetWindowSize(window, window_width, window_height);
 }
 

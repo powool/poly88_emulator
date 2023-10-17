@@ -85,6 +85,9 @@ void Memory::LoadRAM(const char *name)
 
 Memory::Memory()
 {
+	auto dimensions = Cvdi_font::GetDimensions();
+    screen.set_size(64 * dimensions.first, 16 * dimensions.second);
+
     if(screen.open())
     {
         screen.close();
@@ -92,8 +95,6 @@ Memory::Memory()
     }
 
     vdi_font = std::unique_ptr<Cvdi_font>(new Cvdi_font(screen.renderer()));
-
-    screen.set_size(64 * vdi_font->width(), 16 * vdi_font->height());
 
     debug = FALSE;
     if(::debug) std::cerr<<"starting up memory...\n";

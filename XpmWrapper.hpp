@@ -3,9 +3,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <vector>
-#include <string>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 /**
  * XPM helper class to aid parsing and scaling
@@ -20,7 +21,6 @@ class XpmWrapper
     int bitPlanes;      // last value in xpm header line
 	bool deallocateXpmData;
 	char **xpmData;
-    void Set(const char **xpm);
 	void setFontValues() {
 		std::istringstream s(xpmData[0]);
 		s >> width >> height >> colorCount >> bitPlanes;
@@ -120,4 +120,6 @@ public:
     const char **GetXpmData() {
 		return const_cast<const char **>(xpmData);
 	}
+	int GetWidth() { return width; }
+	int GetHeight() { return height; }
 };
