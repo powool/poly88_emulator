@@ -24,7 +24,7 @@ int Csdl::close()
     SDL_DestroyWindow(window);
     window = NULL;
     _renderer = NULL;
-    if(--sdl_reference_count == 0) SDL_Quit();
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
     return 0;
 }
 
@@ -37,7 +37,7 @@ void Csdl::set_size(int window_width, int window_height)
 
 int Csdl::open()
 {
-    if(sdl_reference_count++ == 0 && SDL_Init(SDL_INIT_VIDEO)<0)
+    if(SDL_InitSubSystem(SDL_INIT_VIDEO)<0)
     {
         fprintf(stderr, "failed to open SDL: %s\n", SDL_GetError());
         return 1;
@@ -63,8 +63,6 @@ int Csdl::open()
     this->window_height = window_height;
 //    SDL_EnableUNICODE(1);
 //    SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
-	// this sleep gets the initial rendering right - I have no idea why:
-	sleep(1);
     return 0;
 }
 
@@ -134,8 +132,6 @@ void Csdl::print_valid_modes()
         }
 #endif
 }
-
-int Csdl::sdl_reference_count = 0;
 
 int Csdl::get_keystroke(bool poll)
 {

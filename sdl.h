@@ -4,7 +4,6 @@ class Csdl
 {
     SDL_Window *window;
     SDL_Renderer *_renderer;
-    static int  sdl_reference_count;
     int window_width, window_height;
 	bool needsUpdate = false;
 public:
