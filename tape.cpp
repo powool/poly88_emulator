@@ -42,6 +42,12 @@ class WaveHeader {
 		uint32_t	size;	//
 	};
 
+	static const ChunkHeader *GetChunkHeader(const char *header) {
+		int chunkHeaderOffset = sizeof(RIFFHeader);
+
+		return reinterpret_cast<const ChunkHeader *>(header + chunkHeaderOffset);
+	}
+
 public:
 	static int Size() {
 		// probably not safe/portable:
@@ -55,19 +61,24 @@ public:
 	}
 
 	static uint32_t SampleSize(const char *header) {
-		int chunkHeaderOffset = sizeof(RIFFHeader);
+		return GetChunkHeader(header)->sampleSize;
+	}
 
-		const ChunkHeader *chunkHeader = reinterpret_cast<const ChunkHeader *>(header + chunkHeaderOffset);
-		return chunkHeader->sampleSize;
+	static uint32_t SamplesPerSecond(const char *header) {
+		return GetChunkHeader(header)->samplesPerSecond;
 	}
 };
 
 class Audio {
 	std::unique_ptr<int16_t []>	wavData;
 	int sampleCount;
+	int samplesPerSecond;
+	bool invertPhase;
 public:
 	Audio(const std::string &fileName) {
 		struct stat b;
+
+		invertPhase = false;
 
 		if(stat(fileName.c_str(), &b)) {
 			perror((std::string() + "can't stat " + fileName).c_str());
@@ -95,21 +106,26 @@ public:
 		}
 
 		sampleCount = dataSize / WaveHeader::SampleSize(&(headerData[0]));
+		samplesPerSecond = WaveHeader::SamplesPerSecond(&(headerData[0]));
 
 		wavData = std::make_unique<int16_t []>(sampleCount);
 
 		inputStream.read(reinterpret_cast<char *>(&(wavData[0])), dataSize);
 	}
 
+	void SetInvertPhase(bool invertPhase) {this->invertPhase = invertPhase;}
+
 	int Negative(int index) {
 		return std::signbit(wavData[index]);
 	}
+
 	int16_t Value(int index) {
-		return wavData[index];
+		if(invertPhase) return -wavData[index];
+		else return wavData[index];
 	}
 
-	// XXX get the header and use it:
-	int SampleRate() { return 44100; }
+	int SampleRate() { return samplesPerSecond; }
+
 	int SampleCount() { return sampleCount; }
 
 	// samples per second / bits per second => samples per bit
@@ -131,6 +147,7 @@ public:
 		}
 		return index;
 	}
+
 	int FindNearestZeroCrossing(int index, int bitRate) {
 		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
 		
@@ -149,6 +166,11 @@ public:
 		return index;
 	}
 
+	bool IsAPeak(int index) {
+		if (index < 0 || index > sampleCount - 1) return false;
+		return !Negative(index) && Value(index - 1) <= Value(index) && Value(index) >= Value(index+1);
+	}
+
 	void Dump(std::ostream &stream, int index) {
 		stream << index << ", " << TimeOffset(index) << "s: ";
 		for(auto i = index - 3; i < index; i++) {
@@ -165,6 +187,11 @@ public:
 	}
 };
 
+// Decode 300 baud byte format data, which is a two tone encoding (AKA
+// frequency shift key - FSK), where 1200HZ represents a 0, and 2400HZ
+// represents a 1.
+//
+// To my knowledge, 300 bits per second is the only speed byte encoded tape I have.
 std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 	int samplesPerBit = audio.SamplesPerBit(bitRate);
 	int initialIndex = index;
@@ -187,7 +214,7 @@ std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 
 	while (index < lastIndex) {
 		// count peaks - but don't use adjacent samples, as they can be noisy:
-		if (!audio.Negative(index) && audio.Value(index - 1) <= audio.Value(index) && audio.Value(index) >= audio.Value(index+1)) {
+		if (audio.IsAPeak(index)) {
 			if (abs(indexOfLastPeak - index) > 10) {
 				fullWaveCount++;
 				indexOfLastPeak = index;
@@ -196,7 +223,9 @@ std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 		index++;
 	}
 
-	// recode full wave count found to 0 or 1 bit
+	// Recode full wave count found to 0 or 1 bit.
+	// Getting edge cases exactly right is hard in the face
+	// of signal noise, so fudge on peak counting.
 	int resultBit;
 	switch(fullWaveCount) {
 		case 3:
@@ -217,9 +246,10 @@ std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 			break;
 	}
 
-	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak, 300));
+	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak, bitRate));
 }
 
+// handle polyphase (biphase/manchest encoded) data
 std::pair<int, int> BitDecodePolyPhaseEncodedBit(Audio &audio, int index, int bitRate) {
 	// not implemented
 	return std::make_pair(0, 0);
@@ -281,7 +311,7 @@ public:
 	//
 	// If we run out of data to return, we throw an exception
 	std::pair<int, int> ByteReadUnsynced(Audio &audio, int index) {
-		int samplesPerBit = audio.SamplesPerBit(300);
+		int samplesPerBit = audio.SamplesPerBit(bitRate);
 		uint8_t resultByte = 0;
 
 		std::pair<int, int> startBit;
@@ -367,12 +397,16 @@ public:
 };
 
 void usage(int argc, char **argv) {
+	std::cerr << "usage: " << argv[0] << " [options] 16 bit RIFF WAV file name" << std::endl;
+	std::cerr << "where options are:" << std::endl;
+	std::cerr << "	-d -> enable debug output" << std::endl;
+	std::cerr << "	-p -> invert signal (usually for polyphase tapes)" << std::endl;
 }
 
 int main(int argc, char **argv) {
 	int opt;
 	int debug = false;
-	bool phase = false;
+	bool invertPhase = false;
 
 	while ((opt = getopt(argc, argv, "dl:pu:")) != -1) {
 		switch(opt) {
@@ -380,18 +414,24 @@ int main(int argc, char **argv) {
 				debug = true;
 				break;
 			case 'p':
-				phase = !phase;
+				invertPhase = true;
 				break;
 			default:
 				usage(argc, argv);
 				exit(1);
 		}
 	}
+	if(optind >= argc) {
+		usage(argc, argv);
+		exit(1);
+	}
 
 	Audio audio(argv[optind]);
 	Uart uart(DecodeByteEncodedBit);
 	uart.SetDebug(debug);
 	uart.SetSyncedReadIndex(audio, 0);
+
+	audio.SetInvertPhase(invertPhase);
 
 	try {
 		while(true) {
