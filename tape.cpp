@@ -135,9 +135,10 @@ public:
 		return double(index) / SampleRate();
 	}
 
+	// This detects a negative to positive transition
 	int FindThisOrNextZeroCrossing(int index, int bitRate) {
 		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
-		
+
 		// skip to next negative to positive signal transition
 		while (index < lastIndex) {
 			if (Negative(index) && !Negative(index + 1)) {
@@ -148,6 +149,7 @@ public:
 		return index;
 	}
 
+	// This detects a negative to positive transition
 	int FindNearestZeroCrossing(int index, int bitRate) {
 		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
 		
@@ -166,6 +168,25 @@ public:
 		return index;
 	}
 
+	// This detects any transition, with any polarity
+	int FindThisOrNextZeroCrossingAnyPolarity(int index, int bitRate) {
+		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
+
+		// skip to next negative to positive signal transition
+		while (index < lastIndex) {
+			if (Negative(index) && !Negative(index + 1) || !Negative(index) && Negative(index +1)) {
+				break;
+			}
+			index++;
+		}
+		return index;
+	}
+
+	// Detect if this is a regional high point.
+	// Due to noisy signals, the caller needs to see if this
+	// peak is unique.
+	// Example patterns seen near peak:  30 40 50 40 50 40 30
+	//                                   30 40 50 50 50 40 30
 	bool IsAPeak(int index) {
 		if (index < 0 || index > sampleCount - 1) return false;
 		return !Negative(index) && Value(index - 1) <= Value(index) && Value(index) >= Value(index+1);
@@ -318,6 +339,7 @@ public:
 
 		startBit = BitRead(audio, index);
 
+		// if not a 0 (start) bit, let caller know
 		if (startBit.first != 0) {
 			return std::make_pair(256, 0);
 		}
