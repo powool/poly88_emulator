@@ -281,9 +281,10 @@ class Uart {
 	const int bitRate = 300;	// bit per second
 	std::pair<int, int> (*bitDecoder)(Audio &, int, int);
 	int syncedIndex;
+	Audio &audio;
 
 public:
-	Uart(std::pair<int, int> (*bitDecoder)(Audio &, int, int)) {
+	Uart(std::pair<int, int> (*bitDecoder)(Audio &, int, int), Audio &_audio) : audio(_audio) {
 		debug = false;
 		this->bitDecoder = bitDecoder;
 		syncedIndex = 0;
@@ -291,17 +292,17 @@ public:
 
 	void SetDebug(int debug) { this->debug = debug; }
 
-	std::pair<int, int> BitRead(Audio &audio, int index) {
+	std::pair<int, int> BitRead(int index) {
 		return bitDecoder(audio, index, bitRate);
 	}
 
 	// return the index of the next valid bit, throw on out of data
-	int SyncToValidBit(Audio &audio, int index) {
+	int SyncToValidBit(int index) {
 		auto lastIndex = audio.SampleCount() - 2 * audio.SamplesPerBit(bitRate);
 		while(index < lastIndex) {
 			index = audio.FindThisOrNextZeroCrossing(index, bitRate);
 
-			auto bit = BitRead(audio, index);
+			auto bit = BitRead(index);
 			if (bit.first == 0 || bit.first == 1) {
 				return index;
 			}
@@ -331,13 +332,13 @@ public:
 	// is a very good approach yet.
 	//
 	// If we run out of data to return, we throw an exception
-	std::pair<int, int> ByteReadUnsynced(Audio &audio, int index) {
+	std::pair<int, int> ByteReadUnsynced(int index) {
 		int samplesPerBit = audio.SamplesPerBit(bitRate);
 		uint8_t resultByte = 0;
 
 		std::pair<int, int> startBit;
 
-		startBit = BitRead(audio, index);
+		startBit = BitRead(index);
 
 		// if not a 0 (start) bit, let caller know
 		if (startBit.first != 0) {
@@ -351,7 +352,7 @@ public:
 		int bitIndex;
 		// in theory, we have a stop bit, now get 8 data bits
 		for(bitIndex = 0; bitIndex < 8; bitIndex++) {
-			auto dataBit = BitRead(audio, index);
+			auto dataBit = BitRead(index);
 
 			if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(dataBit.first) << std::dec << " data bit #" << bitIndex << std::endl;
 
@@ -368,7 +369,7 @@ public:
 
 		// now check for two stop bits
 
-		auto firstStopBit = BitRead(audio, index);
+		auto firstStopBit = BitRead(index);
 
 		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(firstStopBit.first) << std::dec << " first stop bit" << std::endl;
 
@@ -380,7 +381,7 @@ public:
 
 		index = firstStopBit.second;
 
-		auto secondStopBit = BitRead(audio, index);
+		auto secondStopBit = BitRead(index);
 
 		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(secondStopBit.first) << std::dec << " second stop bit" << std::endl;
 
@@ -393,21 +394,37 @@ public:
 		return std::make_pair(resultByte, index);
 	}
 
-	void SetSyncedReadIndex(Audio &audio, int index) {
+	void SetSyncedReadIndex(int index) {
 		syncedIndex = index;
-		syncedIndex = SyncToValidBit(audio, syncedIndex);
+		syncedIndex = SyncToValidBit(syncedIndex);
 	}
 
-	uint8_t ByteReadSynced(Audio &audio) {
+	std::pair<int, int> ByteReadUnsyncedPolyPhase(int bitCellStartIndex) {
+#if 1
+		const int bitRate = 4800;
+		int samplesPerBit = audio.SamplesPerBit(bitRate);
+		const int hysterisis = 10;	// WAG
+		int oneShotTriggerIndex = bitCellStartIndex + .75 * samplesPerBit;
+
+#else
+		// ensure we're at a transition XXX NO, WE DON'T unless there is no transition
+		index = audio.FindThisOrNextZeroCrossingAnyPolarity(index, bitRate);
+
+		polyPhaseClockIndex = index;
+#endif
+		return std::make_pair(0, 0);
+	}
+
+	uint8_t ByteReadSynced() {
 		std::pair<int, int> byte;
 		while(true) {
 			if (debug) {
 				audio.Dump(std::cout, syncedIndex);
 			}
-			byte = ByteReadUnsynced(audio, syncedIndex);
+			byte = ByteReadUnsynced(syncedIndex);
 			if (byte.first == 256) {
 				syncedIndex += 4;		// skip 4 samples
-				syncedIndex = SyncToValidBit(audio, syncedIndex);
+				syncedIndex = SyncToValidBit(syncedIndex);
 				continue;
 			}
 			syncedIndex = byte.second;
@@ -449,15 +466,15 @@ int main(int argc, char **argv) {
 	}
 
 	Audio audio(argv[optind]);
-	Uart uart(DecodeByteEncodedBit);
+	Uart uart(DecodeByteEncodedBit, audio);
 	uart.SetDebug(debug);
-	uart.SetSyncedReadIndex(audio, 0);
+	uart.SetSyncedReadIndex(0);
 
 	audio.SetInvertPhase(invertPhase);
 
 	try {
 		while(true) {
-			auto ch = uart.ByteReadSynced(audio);
+			auto ch = uart.ByteReadSynced();
 			std::cout << ch;
 		}
 	} catch (AudioEOF &e) {
