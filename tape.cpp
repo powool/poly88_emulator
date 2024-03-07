@@ -13,214 +13,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-class AudioEOF : std::runtime_error {
-public:
-	AudioEOF(const char *s) : std::runtime_error(s) {;}
-};
-
-class WaveHeader {
-	struct RIFFHeader {
-		char	RIFF[4];	// 'RIFF'
-		uint32_t	size;	//
-		char	WAVE[4];	// 'WAVE'
-	};
-
-	struct ChunkHeader {
-		char		format[4];	// 'fmt '
-		uint32_t	chunkSize;	// sizeof(ChunkHeader)
-		uint16_t	dataFormat;	// 0x0001
-		uint16_t	channels;	// 0x0001
-		uint32_t	samplesPerSecond;	// 44100
-		uint32_t	bytesPerSecond;	// 0x00015888
-		uint16_t	sampleSize;	// 0x0002 (16-bit mono)
-		uint16_t	bitsPerSample;	// 0x0010
-	};
-
-	struct DataHeader {
-		char		ID[4];	// 'data'
-		uint32_t	size;	//
-	};
-
-	static const ChunkHeader *GetChunkHeader(const char *header) {
-		int chunkHeaderOffset = sizeof(RIFFHeader);
-
-		return reinterpret_cast<const ChunkHeader *>(header + chunkHeaderOffset);
-	}
-
-public:
-	static int Size() {
-		// probably not safe/portable:
-		return sizeof(RIFFHeader) + sizeof(ChunkHeader) + sizeof(DataHeader);
-	}
-	static uint32_t DataSize(const char *header) {
-		int dataHeaderOffset = sizeof(RIFFHeader) + sizeof(ChunkHeader);
-
-		const DataHeader *dataHeader = reinterpret_cast<const DataHeader *>(header + dataHeaderOffset);
-		return dataHeader->size;
-	}
-
-	static uint32_t SampleSize(const char *header) {
-		return GetChunkHeader(header)->sampleSize;
-	}
-
-	static uint32_t SamplesPerSecond(const char *header) {
-		return GetChunkHeader(header)->samplesPerSecond;
-	}
-};
-
-class Audio {
-	std::unique_ptr<int16_t []>	wavData;
-	int sampleCount;
-	int samplesPerSecond;
-	bool invertPhase;
-public:
-	Audio(const std::string &fileName) {
-		struct stat b;
-
-		invertPhase = false;
-
-		if(stat(fileName.c_str(), &b)) {
-			perror((std::string() + "can't stat " + fileName).c_str());
-			exit(1);
-		}
-
-		if (b.st_size < WaveHeader::Size()) {
-			throw(std::invalid_argument(std::string() + "can't open file: " + fileName + ": truncated header"));
-		}
-
-		std::ifstream inputStream(fileName);
-
-		if(!inputStream.good()) {
-			throw(std::invalid_argument(std::string() + "can't open file: " + fileName));
-		}
-
-		auto headerData = std::make_unique<char []>(WaveHeader::Size());
-
-		inputStream.read(&(headerData[0]), WaveHeader::Size());
-
-		auto dataSize = WaveHeader::DataSize(&(headerData[0]));
-
-		if (dataSize + WaveHeader::Size() > b.st_size) {
-			throw(std::invalid_argument(std::string() + "can't open file: " + fileName + ": truncated data"));
-		}
-
-		sampleCount = dataSize / WaveHeader::SampleSize(&(headerData[0]));
-		samplesPerSecond = WaveHeader::SamplesPerSecond(&(headerData[0]));
-
-		wavData = std::make_unique<int16_t []>(sampleCount);
-
-		inputStream.read(reinterpret_cast<char *>(&(wavData[0])), dataSize);
-	}
-
-	void SetInvertPhase(bool invertPhase) {this->invertPhase = invertPhase;}
-
-	int Negative(int index) {
-		return std::signbit(wavData[index]);
-	}
-
-	int16_t Value(int index) {
-		if(invertPhase) return -wavData[index];
-		else return wavData[index];
-	}
-
-	int SampleRate() { return samplesPerSecond; }
-
-	int SampleCount() { return sampleCount; }
-
-	// samples per second / bits per second => samples per bit
-	int SamplesPerBit(int bitRate) { return SampleRate() / bitRate; }
-
-	double TimeOffset(int index) {
-		return double(index) / SampleRate();
-	}
-
-	// This detects a negative to positive transition
-	int FindThisOrNextZeroCrossing(int index, int bitRate, int hysterisis = 0) {
-		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
-
-		// skip to next negative to positive signal transition
-		while (index < lastIndex) {
-			if (Value(index) - hysterisis < 0 && Value(index + 1) - hysterisis >= 0) {
-				break;
-			}
-			index++;
-		}
-		return index;
-	}
-
-	// This detects a positive to negative transition
-	int FindThisOrNextNegativeZeroCrossing(int index, int bitRate, int hysterisis = 0) {
-		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
-
-		// skip to next negative to positive signal transition
-		while (index < lastIndex) {
-			if (Value(index) + hysterisis >= 0 && Value(index + 1) + hysterisis < 0) {
-				break;
-			}
-			index++;
-		}
-		return index;
-	}
-
-	// This detects a negative to positive transition
-	int FindNearestZeroCrossing(int index, int bitRate, int hysterisis = 0) {
-		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
-		
-		// find nearest negative to positive signal transition
-		for (int distance = 0; distance < SamplesPerBit(bitRate); distance++) {
-			if (Value(index + distance) - hysterisis < 0 && Value(index + distance + 1) - hysterisis >= 0) {
-				index += distance;
-				break;
-			}
-			if (Value(index - distance) - hysterisis < 0 && Value(index - distance + 1) - hysterisis >= 0) {
-				index -= distance;
-				break;
-			}
-		}
-
-		return index;
-	}
-
-	// This detects any transition, with any polarity
-	int FindThisOrNextTransition(int index, int hysterisis = 0) {
-		// Skip to next negative to positive signal transition.
-		// Caller needs to verify if this is a local transition or not
-		while (index < SampleCount()) {
-			if ((Value(index) - hysterisis < 0 && Value(index + 1) - hysterisis >= 0) ||
-					(Value(index) + hysterisis >=0 && Value(index + 1) + hysterisis < 0)) {
-				break;
-			}
-			index++;
-		}
-		return index;
-	}
-
-	// Detect if this is a regional high point.
-	// Due to noisy signals, the caller needs to see if this
-	// peak is unique.
-	// Example patterns seen near peak:  30 40 50 40 50 40 30
-	//                                   30 40 50 50 50 40 30
-	bool IsAPeak(int index) {
-		if (index < 0 || index > sampleCount - 1) return false;
-		return !Negative(index) && Value(index - 1) <= Value(index) && Value(index) >= Value(index+1);
-	}
-
-	void Dump(std::ostream &stream, int index) {
-		stream << index << ", " << TimeOffset(index) << "s: ";
-		for(auto i = index - 3; i < index; i++) {
-			stream << " " << Value(i);
-			if (i < index - 1) stream << ", ";
-		}
-		stream << " (";
-		stream << " " << Value(index) << ") ";
-		for(auto i = index + 1; i < index + 4; i++) {
-			stream << " " << Value(i);
-			if (i < index + 3) stream << ", ";
-		}
-		stream << std::endl;
-	}
-};
+#include "audio.h"
 
 // Decode 300 baud byte format data, which is a two tone encoding (AKA
 // frequency shift key - FSK), where 1200HZ represents a 0, and 2400HZ
@@ -281,10 +74,10 @@ std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 			break;
 	}
 
-	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak, bitRate));
+	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak));
 }
 
-// handle polyphase (biphase/manchest encoded) data
+// handle polyphase (biphase/manchester encoded) data
 std::pair<int, int> BitDecodePolyPhaseEncodedBit(Audio &audio, int index, int bitRate) {
 	// not implemented
 	return std::make_pair(0, 0);
@@ -314,7 +107,7 @@ public:
 	int SyncToValidBit(int index) {
 		auto lastIndex = audio.SampleCount() - 2 * audio.SamplesPerBit(bitRate);
 		while(index < lastIndex) {
-			index = audio.FindThisOrNextZeroCrossing(index, bitRate);
+			index = audio.FindThisOrNextZeroCrossing(index);
 
 			auto bit = BitRead(index);
 			if (bit.first == 0 || bit.first == 1) {
