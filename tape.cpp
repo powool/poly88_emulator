@@ -77,13 +77,7 @@ std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak));
 }
 
-// handle polyphase (biphase/manchester encoded) data
-std::pair<int, int> BitDecodePolyPhaseEncodedBit(Audio &audio, int index, int bitRate) {
-	// not implemented
-	return std::make_pair(0, 0);
-}
-
-class Uart {
+class PolyAudioTapeDecoder {
 	bool debug;
 	const int bitRate = 300;	// bit per second
 	std::pair<int, int> (*bitDecoder)(Audio &, int, int);
@@ -91,7 +85,7 @@ class Uart {
 	Audio &audio;
 
 public:
-	Uart(std::pair<int, int> (*bitDecoder)(Audio &, int, int), Audio &_audio) : audio(_audio) {
+	PolyAudioTapeDecoder(std::pair<int, int> (*bitDecoder)(Audio &, int, int), Audio &_audio) : audio(_audio) {
 		debug = false;
 		this->bitDecoder = bitDecoder;
 		syncedIndex = 0;
@@ -285,15 +279,15 @@ int main(int argc, char **argv) {
 	}
 
 	Audio audio(argv[optind]);
-	Uart uart(DecodeByteEncodedBit, audio);
-	uart.SetDebug(debug);
-	uart.SetSyncedReadIndex(0);
+	PolyAudioTapeDecoder decoder(DecodeByteEncodedBit, audio);
+	decoder.SetDebug(debug);
+	decoder.SetSyncedReadIndex(0);
 
 	audio.SetInvertPhase(invertPhase);
 
 	try {
 		while(true) {
-			auto ch = uart.ByteReadSynced();
+			auto ch = decoder.ByteReadSynced();
 			std::cout << ch;
 		}
 	} catch (AudioEOF &e) {
