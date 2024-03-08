@@ -19,7 +19,7 @@ if("${CMAKE_BUILD_TYPE}" MATCHES "")
 endif()
 
 add_executable(${PROJECT_NAME} emulator.cpp poly88.cpp memory.cpp i8080.cpp devices.cpp poly88_devices.cpp vdi_font.cpp sdl.cpp thirdparty/z80d.cpp)
-add_executable(tape tape.cpp)
+add_executable(tape tape.cpp audio.cpp)
 
 # see http://stackoverflow.com/questions/23850472/how-to-use-sdl2-and-sdl-image-with-cmake
 INCLUDE(FindPkgConfig)
