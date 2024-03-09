@@ -68,7 +68,7 @@ public:
 	uint8_t ReadByte() {
 
 		// search for a start bit
-		while (ReadBit() != 0) {
+		while (ReadBit() != 1) {
 			byteSync = false;
 		}
 
