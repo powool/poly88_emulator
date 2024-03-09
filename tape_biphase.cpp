@@ -16,6 +16,11 @@
 #include "audio.h"
 #include "tape_header.h"
 
+class ChecksumError : std::runtime_error {
+public:
+	ChecksumError(const char *s) : std::runtime_error(s) {;}
+};
+
 class PolyAudioTapeDecoder {
 	// Hysterisis out of +/- 32767 - pdf says we want +/- 4mv hysterisis
 	// According to https://en.wikipedia.org/wiki/Line_level, 0dB for
@@ -27,6 +32,11 @@ class PolyAudioTapeDecoder {
 
 	bool debug;
 	int bitCellStartIndex;
+	int lastBit;
+
+	// for debug dump of the captured byte:
+	int debugByteStartIndex;
+	int debugByteEndIndex;
 
 	int bitRate;	// bit per second
 
@@ -41,6 +51,7 @@ public:
 		bitCellStartIndex = 0;
 		bitSync = false;
 		SetBitRate(2400);
+		lastBit = 0;
 	}
 
 	void SetDebug(int debug) { this->debug = debug; }
@@ -49,28 +60,44 @@ public:
 
 	// See http://www.kazojc.com/elementy_czynne/IC/8T20.pdf
 	//
+	// On entry, we can be 100% in sync, but not pointing to a signal transition,
+	// this is due to the fact that the signal can be out of phase with the synthetic clock.
+	// The only time we know the next transition is exactly on a synthetic clock edge
+	// is on the 1->0 transition.
 	int ReadBit() {
 		int oneShotTriggerIndex = bitCellStartIndex + .75 * samplesPerBit;
 
-		// ensure we're at the start of a transition
-
-		auto fallingEdgeIndex = audio.FindThisOrNextTransition(bitCellStartIndex + 1, hysterisis);
-
-		// Here, due to the encoding, we guarantee that the following transition will
-		// be the beginning of a bit cell.
-		bitCellStartIndex = audio.FindThisOrNextTransition(oneShotTriggerIndex, hysterisis);
-
 		int resultingBit = audio.Value(oneShotTriggerIndex) > 0;
 
+		// see if we can re-sync exactly
+		if (lastBit == 1 && resultingBit == 0) {
+			// Closed loop:
+			//
+			// Here, due to the encoding, we guarantee that the following transition will
+			// be the beginning of a bit cell. Find it and reset our cell index to that transition.
+			bitCellStartIndex = audio.FindThisOrNextTransition(oneShotTriggerIndex, hysterisis);
+		} else {
+			// open loop clocking
+			bitCellStartIndex += samplesPerBit;
+		}
+
+		lastBit = resultingBit;
 		return resultingBit;
 	}
 
 	uint8_t ReadByte() {
 
-		// search for a start bit
-		while (ReadBit() != 1) {
-			byteSync = false;
+		debugByteStartIndex = bitCellStartIndex;
+
+		// There is exactly one start bit for the entire record,
+		// not per character.
+		if(!byteSync) {
+			// search for a start bit
+			while (ReadBit() != 1) {
+				byteSync = false;
+			}
 		}
+		byteSync = true;
 
 		uint8_t resultByte = 0;
 		for(auto i = 0 ; i < 8; i++) {
@@ -80,36 +107,39 @@ public:
 			}
 		}
 
+		debugByteEndIndex = bitCellStartIndex;
+
 		return resultByte;
 	}
 
 	void ReadRecord() {
 		auto savedIndex = bitCellStartIndex;
-		auto byte = ReadByte();
+		uint8_t byte;
 
-		while(byte != TapeHeader::SYNC) {
+		byteSync = false;
+
+		while((byte = ReadByte()) != TapeHeader::SYNC) {
 			// go back to the start bit
-			bitCellStartIndex = savedIndex;
-
-			// skip this start bit
-			ReadBit();	// skip to the next bit, preserving sync, if we have it
+			bitCellStartIndex = savedIndex + samplesPerBit/4;
 
 			// keep track of new possible start bit
 			savedIndex = bitCellStartIndex;
 
-			// read the byte from this new possible start location
-			byte = ReadByte();
 			continue;
 		}
-		std::cout << "yaay! got an E6!!" << std::endl;
+		if(debug) std::cout << "yaay! got an E6!!" << std::endl;
 		while(byte == TapeHeader::SYNC) {
-			if (debug) std::cout << savedIndex << "/" << (bitCellStartIndex - savedIndex) << ", " << audio.TimeOffset(savedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << std::endl;
+			if (debug) {
+				audio.Dump(std::cout, debugByteStartIndex, samplesPerBit * 9);
+				std::cout << savedIndex << "/" << (bitCellStartIndex - savedIndex) << ", " << audio.TimeOffset(savedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << std::endl;
+			}
 			else std::cout << (byte);
 			byte = ReadByte();
 		}
 
 		if(byte != TapeHeader::SOH) {
 			std::cerr << bitCellStartIndex << ", " << audio.TimeOffset(bitCellStartIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << " expected SOH = 0x01" << std::endl;
+			return;
 		}
 
 		std::vector<uint8_t> headerBytes;
@@ -122,6 +152,27 @@ public:
 
 		TapeHeader *header = reinterpret_cast<TapeHeader *> (&headerBytes[0]);
 		if (debug) header->Dump();
+
+		if(!debug) {
+			for(auto i=0; i<sizeof(TapeHeader); i++) {
+				std::cout << headerBytes[i];
+			}
+		}
+
+		uint8_t		runningChecksum = 0;
+		uint16_t	dataLength = header->dataLength;
+		// size == 0 actually means 256 bytes
+		if(dataLength == 0) dataLength = 256;
+		for(auto i=0; i<dataLength; i++) {
+			auto byte = ReadByte();
+			if (!debug) std::cout << byte;
+			runningChecksum += byte;
+		}
+		// last byte after data is the trailing checksum
+		runningChecksum += ReadByte();
+		if(runningChecksum != 0) {
+			std::cerr << "got bad checksum..." << std::endl;
+		}
 	}
 
 	void ReadTape() {
@@ -179,5 +230,7 @@ int main(int argc, char **argv) {
 		}
 	} catch (AudioEOF &e) {
 		std::cerr << "Reached EOF!" << std::endl;
+	} catch (ChecksumError &e) {
+		std::cerr << "got bad checksum!" << std::endl;
 	}
 }
