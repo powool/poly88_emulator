@@ -159,6 +159,11 @@ int Audio::FindThisOrNextTransition(int index, int hysterisis) {
 		}
 		index++;
 	}
+
+	if(index >= SampleCount()) {
+			throw AudioEOF("ran out of data");
+	}
+
 	return index;
 }
 
@@ -172,7 +177,7 @@ bool Audio::IsAPeak(int index) {
 	return !Negative(index) && Value(index - 1) <= Value(index) && Value(index) >= Value(index+1);
 }
 
-void Audio::Dump(std::ostream &stream, int index) {
+void Audio::Dump(std::ostream &stream, int index, int count) {
 	stream << index << ", " << TimeOffset(index) << "s: ";
 	for(auto i = index - 3; i < index; i++) {
 		stream << " " << Value(i);
@@ -180,7 +185,7 @@ void Audio::Dump(std::ostream &stream, int index) {
 	}
 	stream << " (";
 	stream << " " << Value(index) << ") ";
-	for(auto i = index + 1; i < index + 4; i++) {
+	for(auto i = index + 1; i < index + 4 + count; i++) {
 		stream << " " << Value(i);
 		if (i < index + 3) stream << ", ";
 	}
