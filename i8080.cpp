@@ -9,6 +9,28 @@
 #include "util.h"
 #include "z80d.h"
 
+static int half_carry_table[] = { 0, 0, 1, 0, 1, 0, 1, 1 };
+static int sub_half_carry_table[] = { 1, 0, 0, 0, 1, 1, 1, 0 };
+// HCT:
+// 2 | 4 | 6 | 7 = 010 | 100 | 110 | 111
+// index order: TB1, TB2, TW1
+// (!TB1 && TB2 && !TW1) || (TB1 && !TB2 && !TW3) || (TB1 && TB2 && !TW1) || (TB1 && TB2 && TW1)
+// source: https://www.boolean-algebra.com/
+// Let A=TB1, B=TB2 and C=TW1
+// A	B	C	Output
+// 0	0	0	F
+// 0	0	1	F
+// 0	1	0	T
+// 0	1	1	F
+// 1	0	0	T
+// 1	0	1	F
+// 1	1	0	T
+// 1	1	1	T
+// minimal: !CB + AB + A!C
+// which looks like:
+// AB || !C (B || A)
+// Too messy, I can see why they did a table lookup.
+
 I8080::I8080()
 {
 	int i,j;
@@ -50,7 +72,7 @@ int I8080::ExecuteCycle(Devices *dev)
 {
 	uint16_t    tmp16;
 	uint8_t          tmp8;
-	uint8_t          tbyte1, tbyte2;
+	uint8_t          tbyte1, tbyte2, index;
 	uint16_t    tword1;
 
 // instructions that are invalid call this macro
@@ -79,6 +101,16 @@ int I8080::ExecuteCycle(Devices *dev)
 			r1(r2()); \
 			PC(PC() + 1); \
 			return 0;
+#define HALF_CARRY_INDEX(tbyte1, tbyte2, tword1) \
+			((tbyte1 & 0x08) >> 1) | \
+				((tbyte2 & 0x08) >> 2) | \
+				((tword1 & 0x08) >> 3)
+
+#define HALF_CARRY_ADD(tbyte1, tbytes2, tword1) \
+			half_carry_table[HALF_CARRY_INDEX(tbyte1, tbyte2, tword1)]
+
+#define HALF_CARRY_SUB(tbyte1, tbytes2, tword1) \
+			sub_half_carry_table[HALF_CARRY_INDEX(tbyte1, tbyte2, tword1)]
 
 #define ADD_R(opcode, r) \
 		case opcode: \
@@ -87,8 +119,8 @@ int I8080::ExecuteCycle(Devices *dev)
 			tword1 = tbyte1+tbyte2; \
 			A((uint8_t) tword1); \
 			SET_ZERO_SIGN_PARITY(A()); \
-			_PSW.aux_carry = ( (tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf); \
-			_PSW.carry = (tword1 > 0xff); \
+			_PSW.aux_carry = HALF_CARRY_ADD(tbyte1, tbyte2, tword1); \
+			_PSW.carry = (tword1 & 0x100) != 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -99,7 +131,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			tword1 = tbyte1+tbyte2 + _PSW.carry; \
 			A((uint8_t) tword1); \
 			SET_ZERO_SIGN_PARITY(A()); \
-			_PSW.aux_carry = ( _PSW.carry + (tbyte1 & 0xf) + (tbyte2 & 0xf) > 0xf); \
+			_PSW.aux_carry = HALF_CARRY_ADD(tbyte1, tbyte2, tword1); \
 			_PSW.carry = (tword1 > 0xff); \
 			PC(PC() + 1); \
 			return 0;
@@ -109,11 +141,11 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode: \
 			tbyte1 = A(); \
 			tbyte2 = r(); \
-			tmp8 = tbyte1 - tbyte2; \
-			A(tmp8); \
+			tword1 = tbyte1 - tbyte2; \
+			A(tword1 & 0xff); \
 			SET_ZERO_SIGN_PARITY(A()); \
-			_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) ); \
-			_PSW.carry = (tbyte1 < tbyte2); \
+			_PSW.aux_carry = HALF_CARRY_SUB(tbyte1, tbyte2, tword1); \
+			_PSW.carry = (tword1 & 0x100) != 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -122,10 +154,10 @@ int I8080::ExecuteCycle(Devices *dev)
 			tbyte1 = A(); \
 			tbyte2 = r(); \
 			tword1 = tbyte1 - tbyte2 - _PSW.carry; \
-			A((uint8_t) tword1); \
+			A(tword1 & 0xff); \
 			SET_ZERO_SIGN_PARITY(A()); \
-			_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) + _PSW.carry); \
-			_PSW.carry = (tbyte1 < (tbyte2+_PSW.carry)); \
+			_PSW.aux_carry = HALF_CARRY_SUB(tbyte1, tbyte2, tword1); \
+			_PSW.carry = (tword1 & 0x100) != 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -169,10 +201,10 @@ int I8080::ExecuteCycle(Devices *dev)
 		case opcode: \
 			tbyte1 = A(); \
 			tbyte2 = r(); \
-			tmp8 = tbyte1 - tbyte2; \
-			SET_ZERO_SIGN_PARITY(tmp8); \
-			_PSW.aux_carry = ( (tbyte1 & 0xf) <  (tbyte2 & 0xf) ); \
-			_PSW.carry = (tbyte1 < tbyte2); \
+			tword1 = (uint16_t) tbyte1 - tbyte2; \
+			SET_ZERO_SIGN_PARITY(tword1 & 0xff); \
+			_PSW.aux_carry = HALF_CARRY_SUB(tbyte1, tbyte2, tword1); \
+			_PSW.carry = (tword1 & 0x100) != 0; \
 			PC(PC() + 1); \
 			return 0;
 
@@ -196,19 +228,17 @@ int I8080::ExecuteCycle(Devices *dev)
 
 #define INR_R(opcode, r) \
 		case opcode:    /* INR r */ \
-			tbyte1 = r(); \
 			r(r() + 1); \
 			SET_ZERO_SIGN_PARITY(r()); \
-			_PSW.aux_carry = (tbyte1 & 0xf) == 0xf; \
+			_PSW.aux_carry = ((r() & 0xf) == 0x0); \
 			PC(PC() + 1); \
 			return 0;
 
 #define DCR_R(opcode, r) \
 		case opcode:    /* DCR r */ \
-			tbyte1 = r(); \
 			r(r() - 1); \
 			SET_ZERO_SIGN_PARITY(r()); \
-			_PSW.aux_carry = ((tbyte1 & 0xf) == 0); \
+			_PSW.aux_carry = !((r() & 0xf) == 0xf); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -270,7 +300,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			MVI_R(0x06, B);
 
 		case 0x07:  /* RLC */
-			_PSW.carry = (A() >> 7) & 1;
+			_PSW.carry = (A() & 0x80) != 0;
 			A(A() << 1);
 			A(A() | _PSW.carry);
 			PC(PC() + 1);
@@ -333,20 +363,35 @@ int I8080::ExecuteCycle(Devices *dev)
 			DCR_R(0x25, H);
 			MVI_R(0x26, H);
 
-		case 0x27:  /* DAA */
-			if(_PSW.aux_carry || (A() & 0xf)>9)
-			{
-				A(A() + 6);
-				_PSW.aux_carry = 1;
+		case 0x27:  /* DAA */ {
+				// https://wiki.specnext.dev/Extended_Z80_instruction_set
+				// if(A&$0F>$09 or HF) A±=$06; if(A&$F0>$90 or CF) A±=$60 (± depends on NF)
+				// NF is 1 if last arithmetic instruction was subtract, 0 if last was add
+				uint8_t carry = _PSW.carry;
+				uint8_t add = 0;
+
+				if(_PSW.aux_carry || (A() & 0xf) > 9) {
+					add = 0x06;
+				}
+
+				if(_PSW.carry ||
+						(A() >> 4) > 9 ||
+						((A() >> 4) >= 9 && (A() & 0x0f) > 9)) {
+					add |= 0x60;
+					carry = 1;
+				}
+
+				tbyte1 = A();
+				tbyte2 = add;
+				tword1 = tbyte1+tbyte2;
+				A((uint8_t) tword1);
+				SET_ZERO_SIGN_PARITY(A());
+				_PSW.aux_carry = HALF_CARRY_ADD(tbyte1, tbyte2, tword1);
+				_PSW.carry = carry;
+
+				PC(PC() + 1);
+				return 0;
 			}
-			if(_PSW.carry || (A() >> 4) > 9 || ((A() >> 4) >= 9 && (A() & 0x0f) > 9))
-			{
-				A(A() + 0x60);
-				_PSW.carry = 1;
-			}
-			SET_ZERO_SIGN_PARITY(A());
-			PC(PC() + 1);
-			return 0;
 
 			DAD_R(0x29, HL);
 
@@ -637,7 +682,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			tword1 = tbyte1 + tbyte2 + _PSW.carry;
 			A((uint8_t) tword1);
 			SET_ZERO_SIGN_PARITY(A());
-			_PSW.aux_carry = ((tword1 & 0xf) > 0xf);
+			_PSW.aux_carry = HALF_CARRY_ADD(tbyte1, tbyte2, tword1);
 			_PSW.carry = (tword1 > 0xff);
 			PC(PC() + 2);
 			return 0;
@@ -693,10 +738,10 @@ int I8080::ExecuteCycle(Devices *dev)
 		case 0xd6:  /* SUI xx */
 			tbyte1 = A();
 			tbyte2 = IMMEDIATE_BYTE();
-			tmp8 = tbyte1 - tbyte2;
-			A(tmp8);
+			tword1 = tbyte1 - tbyte2;
+			A(tword1 & 0xff);
 			SET_ZERO_SIGN_PARITY(A());
-			_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf));
+			_PSW.aux_carry = HALF_CARRY_SUB(tbyte1, tbyte2, tword1);
 			_PSW.carry = (tbyte1 < tbyte2);
 			PC(PC() + 2);
 			return 0;
@@ -744,7 +789,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			tword1 = tbyte1 - tbyte2 - _PSW.carry;
 			A((uint8_t) tword1);
 			SET_ZERO_SIGN_PARITY(A());
-			_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf + _PSW.carry));
+			_PSW.aux_carry = HALF_CARRY_SUB(tbyte1, tbyte2, tword1);
 			_PSW.carry = (tbyte1 < (tbyte2+_PSW.carry));
 			PC(PC()+2);
 			return 0;
@@ -788,10 +833,13 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xe6:  /* ANI xx */
-			A(A() & IMMEDIATE_BYTE());
+			tbyte1 = A();
+			tbyte2 = IMMEDIATE_BYTE();
+			tmp8 = tbyte1 & tbyte2;
+			A(tmp8);
 			SET_ZERO_SIGN_PARITY(A());
+			_PSW.aux_carry = ((tbyte1 | tbyte2) & 0x08) != 0;
 			_PSW.carry = 0;
-			_PSW.aux_carry = 0;
 			PC(PC() + 2);
 			return 0;
 
@@ -803,9 +851,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			return 0;
 
 		case 0xe9:  /* PCHL   (PC<->hl) */
-			tmp16 = HL();
-			HL(PC());
-			PC(tmp16);
+			PC(HL());
 			return 0;
 
 		case 0xea:  /* JPE xxxx */
@@ -892,6 +938,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			tmp8 = tbyte1 | tbyte2;
 			A(tmp8);
 			SET_ZERO_SIGN_PARITY(A());
+			_PSW.aux_carry = 0;
 			_PSW.carry = 0;
 			PC(PC() + 2);
 			return 0;
@@ -937,9 +984,9 @@ int I8080::ExecuteCycle(Devices *dev)
 		case 0xfe:  /* CPI xx */
 			tbyte1 = A();
 			tbyte2 = IMMEDIATE_BYTE();
-			tmp8 = tbyte1 - tbyte2;
-			SET_ZERO_SIGN_PARITY(tmp8);
-			_PSW.aux_carry = ((tbyte1 & 0xf) < (tbyte2 & 0xf));
+			tword1 = tbyte1 - tbyte2;
+			SET_ZERO_SIGN_PARITY((uint8_t) tword1);
+			_PSW.aux_carry = HALF_CARRY_SUB(tbyte1, tbytes2, tword1);
 			_PSW.carry = (tbyte1 < tbyte2);
 			PC(PC() + 2);
 			return 0;
