@@ -40,5 +40,4 @@ public:
     void set_2byte(i8080_addr_t, i8080_addr_t);
     byte_t get_byte(i8080_addr_t) const;
     i8080_addr_t get_2byte(i8080_addr_t) const;
-    void redraw_screen();
 };
