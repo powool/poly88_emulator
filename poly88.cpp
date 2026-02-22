@@ -1,7 +1,6 @@
 
 #include "poly88.h"
 #include "poly88_devices.h" // contains poly specific device names
-#include "polled_string.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -78,18 +77,12 @@ bool Poly88::RunEmulatorCommand(const std::vector<std::string> &args)
 	return false;
 }
 
-bool Poly88::Run(uint64_t &machineCycle)
+bool Poly88::Run(uint64_t &machineCycle, bool freeRunning)
 {
 	machineCycle++;
-	// every 10K cycles, flush the screen
-	if((machineCycle%100000)==0)
-	{
-//			std::cerr << "Updating screen: " << machineCycle << std::endl;
-		memory.screen.update();
-	}
 
 	// every 1K cycles, check interrupts
-	if(((machineCycle%1000)==0)) {
+	if(!freeRunning || ((machineCycle%1000)==0)) {
 		usartControl->Poll();
 		if(keyboard->Poll()) {
 			std::cout << "User closed application." << std::endl;
@@ -118,30 +111,9 @@ bool Poly88::Run(uint64_t &machineCycle)
 
 void Poly88::Command()
 {
-	PolledString pollString(std::cin);
-	uint64_t machineCycle = -1;
+}
 
-	std::ios::sync_with_stdio(false);
-
-	ReadStartupFile();
-
-	while(1)
-	{
-		if (machineCycle % 1000 == 0) {
-			auto inputLine = pollString.PollAndGetStringIfPresent();
-			if(inputLine) {
-				if (inputLine->size() && inputLine->back() == '\n')
-					inputLine->pop_back();
-
-				std::cout << "got a command, here's the line: " << *inputLine << std::endl;
-
-				auto args = GetArgv(*inputLine, ' ');
-				if (RunEmulatorCommand(args)) break;
-			}
-		}
-
-		if (Run(machineCycle)) {
-			break;
-		}
-	}
+void Poly88::KeyPress(uint8_t ch)
+{
+	keyboard->Insert(ch);
 }

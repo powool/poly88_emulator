@@ -67,54 +67,13 @@ void KeyBoard::Write(uint8_t data)
 
 bool KeyBoard::Poll()
 {
-	SDL_Event event;
-
-	// spin until there are no more events for us to process
-	while(SDL_PollEvent(&event))
-	{
-		switch(event.type) {
-			case SDL_QUIT:
-				return true;
-
-			case SDL_TEXTINPUT:
-//		    fprintf(stderr, "got text '%s'\n", event.text.text);
-				{
-					char *s = event.text.text;
-					while(*s) {
-						keys.push(*s);
-						s++;
-					}
-				}
-				break;
-
-			case SDL_KEYDOWN:
-				switch(event.key.keysym.scancode) {
-					case SDL_SCANCODE_LCTRL:
-					case SDL_SCANCODE_RCTRL:
-					case SDL_SCANCODE_LSHIFT:
-					case SDL_SCANCODE_RSHIFT:
-					case SDL_SCANCODE_LALT:
-					case SDL_SCANCODE_RALT:
-					case SDL_SCANCODE_LGUI:
-					case SDL_SCANCODE_RGUI:
-						continue;
-				}
-				auto key = event.key.keysym.sym;
-				if(key < 0x100 && isalpha(key) && event.key.keysym.mod & KMOD_CTRL) {
-					// handle control chars
-					keys.push(key & ~0x60);
-				} else if(key < 0x20 || key == 0x7f) {
-					// handle everything else that is not control, nor is text
-					keys.push(key);
-				} else if(debug) {
-						fprintf(stderr, "keysym.sym = 0x%02x keysym.mod = 0x%02x\n", event.key.keysym.sym, event.key.keysym.mod);
-				}
-				break;
-		}
-	}
-	if(keys.size())
-		SetInterruptPending(true);
 	return false;
+}
+
+void KeyBoard::Insert(uint8_t ch)
+{
+	keys.push(ch);
+	SetInterruptPending(true);
 }
 
 bool KeyBoard::RunEmulatorCommand(const std::vector<std::string> &args)
