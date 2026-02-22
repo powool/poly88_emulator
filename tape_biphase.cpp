@@ -223,14 +223,18 @@ int main(int argc, char **argv) {
 	int debug = false;
 	bool invertPhase = false;
 	int bitRate = 0;
+	int startingIndex = 0;
 
-	while ((opt = getopt(argc, argv, "b:dp")) != -1) {
+	while ((opt = getopt(argc, argv, "b:di:p")) != -1) {
 		switch(opt) {
 			case 'b':
 				bitRate = atoi(optarg);
 				break;
 			case 'd':
 				debug = true;
+				break;
+			case 'i':
+				startingIndex = atoi(optarg);
 				break;
 			case 'p':
 				invertPhase = true;
@@ -248,7 +252,7 @@ int main(int argc, char **argv) {
 	Audio audio(argv[optind]);
 	PolyAudioTapeDecoder decoder(audio);
 	decoder.SetDebug(debug);
-	decoder.SetIndex(1605616);
+	if (startingIndex) decoder.SetIndex(startingIndex);
 	if(bitRate) decoder.SetBitRate(bitRate);
 
 	audio.SetInvertPhase(invertPhase);
