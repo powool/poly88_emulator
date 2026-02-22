@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+Makefile
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+.qt
+old
+poly88_autogen
+Debug
+Release
