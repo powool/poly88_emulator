@@ -19,7 +19,17 @@ project(poly88)
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui)
 qt_standard_project_setup()
 
-qt_add_executable(${PROJECT_NAME} main.cpp poly88.cpp memory.cpp devices.cpp i8080.cpp z80d.cpp poly88_devices.cpp MediaPicker.cpp Keyboard.cpp)
+qt_add_executable(${PROJECT_NAME}
+	main.cpp
+	poly88.cpp
+	memory.cpp
+	devices.cpp
+	i8080.cpp
+	z80d.cpp
+	poly88_devices.cpp
+	MediaPicker.cpp
+	Keyboard.cpp
+)
 
 # Link it all up
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets)
