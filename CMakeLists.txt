@@ -1,17 +1,9 @@
-cmake_minimum_required(VERSION 3.5)
-
-project(poly88)
-
-set(CMAKE_CXX_STANDARD 14)
+cmake_minimum_required(VERSION 3.16)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-#
-# apt-get install libsdl2-dev
-# apt-get install libsdl2-image-dev
-#
-# optional:
-# apt-get install libsdl2-doc
-#
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<CONFIGURATION>)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/$<CONFIGURATION>)
 
 if("${CMAKE_BUILD_TYPE}" MATCHES "")
 	set(CMAKE_BUILD_TYPE "Debug")
@@ -19,19 +11,18 @@ if("${CMAKE_BUILD_TYPE}" MATCHES "")
 	message("Use cmake -DCMAKE_BUILD_TYPE=Release to build for release.")
 endif()
 
-add_executable(${PROJECT_NAME} emulator.cpp poly88.cpp memory.cpp i8080.cpp devices.cpp poly88_devices.cpp vdi_font.cpp sdl.cpp thirdparty/z80d.cpp)
-add_executable(tape_byte tape_byte.cpp audio.cpp)
-add_executable(tape_biphase tape_biphase.cpp audio.cpp)
 
-# see http://stackoverflow.com/questions/23850472/how-to-use-sdl2-and-sdl-image-with-cmake
-INCLUDE(FindPkgConfig)
+project(poly88)
 
-PKG_SEARCH_MODULE(SDL2 REQUIRED sdl2)
-PKG_SEARCH_MODULE(SDL2IMAGE REQUIRED SDL2_image>=2.0.0)
+# Qt Stuff
 
-INCLUDE_DIRECTORIES(${SDL2_INCLUDE_DIRS} ${SDL2IMAGE_INCLUDE_DIRS})
-INCLUDE_DIRECTORIES(thirdparty)
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${SDL2_LIBRARIES} ${SDL2IMAGE_LIBRARIES})
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui)
+qt_standard_project_setup()
+
+qt_add_executable(${PROJECT_NAME} main.cpp poly88.cpp memory.cpp devices.cpp i8080.cpp z80d.cpp poly88_devices.cpp MediaPicker.cpp Keyboard.cpp)
+
+# Link it all up
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets)
 
 add_custom_target(
 	cleanall
