@@ -2,8 +2,6 @@
 
 #include <memory>
 #include "i8080_types.h"
-#include "sdl.h"
-#include "vdi_font.h"
 
 
 class Memory
@@ -15,16 +13,12 @@ private:
     i8080_addr_t    rom_end;    /* start of rom is location 0 */
     bool debug;
 
-    std::unique_ptr<Cvdi_font> vdi_font;
-
 	i8080_addr_t	guardLow = 0xe000;
 	i8080_addr_t	guardHigh = 0xf000;
 
 public:
     Memory();
     ~Memory();
-
-    Csdl screen;
 
     bool Debug() const {return debug;}
     bool Debug(bool b) {debug = b; return debug;}
