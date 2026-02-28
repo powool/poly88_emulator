@@ -315,8 +315,9 @@ void Usart::Write(uint8_t data)
 }
 
 
-UsartControl::UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart) :
+UsartControl::UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart, std::shared_ptr<MediaQueue> mediaQueue) :
 	usart(usart),
+	mediaQueue(mediaQueue),
 	Device(i8080, devices)
 {
 	inputPort = 0x01;
@@ -478,6 +479,7 @@ void UsartControl::Write(uint8_t data)
 				std::string filename;
 
 				if (readFiles.empty()) {
+					mediaQueue->MediaRequest();
 					std::cout << "starting the mag tape for read!" << std::endl;
 					std::cout << "enter a filename here!!!!" << std::endl;
 					std::cin >> filename;

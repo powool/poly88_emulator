@@ -89,8 +89,6 @@ class MainWindow : public QMainWindow
 	MainWindow(QWidget* parent = nullptr) : QMainWindow(parent) {
 		this->setWindowTitle("Poly-88 Emulator");
 
-		emulator = std::make_shared<PolyMorphics88>();
-
 		// ---- Menu bar ----
 		auto *menuBar = this->menuBar();
 
@@ -225,6 +223,8 @@ class MainWindow : public QMainWindow
 		mediaQueue = std::make_shared<MediaQueue>();
 		mediaPicker = std::make_shared<MediaPicker>(mediaQueue, ".");
 
+		emulator = std::make_shared<PolyMorphics88>(mediaQueue);
+
 		polyVdi->setFocusPolicy(Qt::StrongFocus);
 
 		UpdateUI();
@@ -237,6 +237,11 @@ class MainWindow : public QMainWindow
 	int CpuSpeed() { return cpuSpeed; }
 
 	void UpdateUI() {
+		auto mediaWanted = mediaQueue->MediaWanted();
+		if (mediaWanted) {
+			mediaPicker->ShowPicker();
+		}
+
 		// Menu labels & enabled state
 		runStopAction->setText(emulator->Running() ? "Stop" : "Run");
 		singleStepAction->setEnabled(!emulator->Running());

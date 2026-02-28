@@ -2,6 +2,7 @@
 
 #include "i8080_types.h"
 #include "devices.h"
+#include "MediaQueue.hpp"
 
 #include <fstream>
 #include <functional>
@@ -114,10 +115,11 @@ protected:
 // Usart control
 class UsartControl : public Device
 {
+	std::shared_ptr<MediaQueue> mediaQueue;
 	std::queue<std::string> readFiles;
 	std::queue<std::string> writeFiles;
 public:
-	UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart);
+	UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart, std::shared_ptr<MediaQueue> mediaQueue);
 	void StartUp() override;
 	void ShutDown() override;
 	uint8_t Read() override;

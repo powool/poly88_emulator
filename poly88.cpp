@@ -24,7 +24,8 @@ static std::vector<std::string> GetArgv(const std::string& inputLine, char delim
 	return argv;
 }
 
-Poly88::Poly88()
+Poly88::Poly88(std::shared_ptr<MediaQueue> mediaQueue) :
+	mediaQueue(mediaQueue)
 {
 	keyboard = std::make_shared<KeyBoard>(*this, devices);
 	devices.AddDevice(keyboard);
@@ -32,7 +33,7 @@ Poly88::Poly88()
 	devices.AddDevice(std::make_shared<BaudRateGenerator>(*this, devices));
 
 	usart = std::make_shared<Usart>(*this, devices);
-	usartControl = std::make_shared<UsartControl>(*this, devices, usart);
+	usartControl = std::make_shared<UsartControl>(*this, devices, usart, mediaQueue);
 	devices.AddDevice(usart);
 	devices.AddDevice(usartControl);
 
