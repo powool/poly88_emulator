@@ -16,9 +16,10 @@
 #include "audio.h"
 #include "tape_header.h"
 
-class ChecksumError : std::runtime_error {
+class ChecksumError : public std::runtime_error {
 public:
 	ChecksumError(const char *s) : std::runtime_error(s) {;}
+	ChecksumError(const std::string &s) : std::runtime_error(s) {;}
 };
 
 class PolyAudioTapeDecoder {
@@ -127,13 +128,15 @@ public:
 
 			continue;
 		}
-		if(debug) std::cout << "yaay! got an E6!!" << std::endl;
+		if(debug) std::cerr << "synced on valid 0xE6 at tape index: " << savedIndex << std::endl;
 		while(byte == TapeHeader::SYNC) {
 			if (debug) {
-				audio.Dump(std::cout, debugByteStartIndex, samplesPerBit * 9);
-				std::cout << savedIndex << "/" << (bitCellStartIndex - savedIndex) << ", " << audio.TimeOffset(savedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << std::endl;
+#if 0
+				audio.Dump(std::cerr, debugByteStartIndex, samplesPerBit * 9);
+#endif
+				std::cerr << savedIndex << "/" << (bitCellStartIndex - savedIndex) << ", " << audio.TimeOffset(savedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << std::endl;
 			}
-			else std::cout << (byte);
+			else std::cout << byte;
 			byte = ReadByte();
 		}
 
@@ -146,6 +149,7 @@ public:
 
 		headerBytes.resize(sizeof(TapeHeader), 0);
 
+		auto debugTapeHeaderIndex = bitCellStartIndex;
 		for(auto i=0; i<sizeof(TapeHeader); i++) {
 			headerBytes[i] = ReadByte();
 		}
@@ -153,25 +157,50 @@ public:
 		TapeHeader *header = reinterpret_cast<TapeHeader *> (&headerBytes[0]);
 		if (debug) header->Dump();
 
+		if(header->ComputeChecksum() != 0) {
+			throw ChecksumError("got bad header checksum at tape index: " + std::to_string(debugTapeHeaderIndex));
+		}
+
 		if(!debug) {
 			for(auto i=0; i<sizeof(TapeHeader); i++) {
 				std::cout << headerBytes[i];
 			}
 		}
 
-		uint8_t		runningChecksum = 0;
 		uint16_t	dataLength = header->dataLength;
+
 		// size == 0 actually means 256 bytes
 		if(dataLength == 0) dataLength = 256;
+
+		std::vector<uint8_t> dataBytes;
+		dataBytes.resize(dataLength, 0);
+
+		uint8_t		runningChecksum = 0;
+		auto debugTapeDataIndex = bitCellStartIndex;
 		for(auto i=0; i<dataLength; i++) {
-			auto byte = ReadByte();
-			if (!debug) std::cout << byte;
-			runningChecksum += byte;
+			dataBytes[i] = ReadByte();
+			if (!debug) std::cout << dataBytes[i];
+			runningChecksum += dataBytes[i];
 		}
 		// last byte after data is the trailing checksum
-		runningChecksum += ReadByte();
+		auto dataChecksum = ReadByte();
+		runningChecksum += dataChecksum;
+		if (!debug) std::cout << dataChecksum;
+		for(auto i=0;i<dataLength;i++) {
+			std::cerr << dataBytes[i];
+			if(dataBytes[i] == '\r')
+				std::cerr << '\n';
+		}
+		std::cerr << std::endl;
 		if(runningChecksum != 0) {
-			std::cerr << "got bad checksum..." << std::endl;
+			throw ChecksumError(
+				std::string("got bad data checksum: ") +
+				std::to_string(static_cast<uint16_t>(runningChecksum)) +
+				" between tape index: " +
+				std::to_string(debugTapeDataIndex) +
+				" and " +
+				std::to_string(bitCellStartIndex)
+			);
 		}
 	}
 
@@ -231,6 +260,6 @@ int main(int argc, char **argv) {
 	} catch (AudioEOF &e) {
 		std::cerr << "Reached EOF!" << std::endl;
 	} catch (ChecksumError &e) {
-		std::cerr << "got bad checksum!" << std::endl;
+		std::cerr <<  e.what() << std::endl;
 	}
 }
