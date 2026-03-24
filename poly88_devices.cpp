@@ -480,9 +480,8 @@ void UsartControl::Write(uint8_t data)
 
 				if (readFiles.empty()) {
 					mediaQueue->MediaRequest();
-					std::cout << "starting the mag tape for read!" << std::endl;
-					std::cout << "enter a filename here!!!!" << std::endl;
-					std::cin >> filename;
+					mediaQueue->WaitForSelection();
+					filename = mediaQueue->ReturnSelectedMedia().c_str();
 				} else {
 					filename = readFiles.front();
 					readFiles.pop();
