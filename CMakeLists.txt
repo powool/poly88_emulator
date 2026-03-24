@@ -27,7 +27,6 @@ qt_add_executable(${PROJECT_NAME}
 	i8080.cpp
 	z80d.cpp
 	poly88_devices.cpp
-	MediaPicker.cpp
 	Keyboard.cpp
 	TieredMemory.cpp
 )

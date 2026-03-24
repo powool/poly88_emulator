@@ -318,9 +318,9 @@ void Usart::Write(uint8_t data)
 }
 
 
-UsartControl::UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart, std::shared_ptr<MediaQueue> mediaQueue) :
+UsartControl::UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart, std::shared_ptr<FileDialogBridge> fileDialogBridge) :
 	usart(usart),
-	mediaQueue(mediaQueue),
+	fileDialogBridge(fileDialogBridge),
 	Device(i8080, devices)
 {
 	inputPort = 0x01;
@@ -482,9 +482,11 @@ void UsartControl::Write(uint8_t data)
 				std::string filename;
 
 				if (readFiles.empty()) {
-					mediaQueue->MediaRequest();
-					mediaQueue->WaitForSelection();
-					filename = mediaQueue->ReturnSelectedMedia().c_str();
+					filename = fileDialogBridge->RequestFile("Open Tape File for Read");
+					if (filename.empty()) {
+						std::cerr << "Tape read cancelled by user." << std::endl;
+						return;
+					}
 				} else {
 					filename = readFiles.front();
 					readFiles.pop();
@@ -515,7 +517,7 @@ void UsartControl::Write(uint8_t data)
 		} else if(data == 0x00) {
 			if(usart->usartFile) {
 				if(usart->usartFile->GetState() == IUsartFile::INPUT) {
-					std::cout << "stop the mag tape!" << std::endl;
+//					std::cout << "stop the mag tape!" << std::endl;
 					SetUsartFile(nullptr);
 					usart->SetInterruptPending(false);
 				}

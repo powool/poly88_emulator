@@ -2,12 +2,12 @@
 #include <atomic>
 #include <thread>
 #include "EmulatorInterface.h"
-#include "MediaQueue.hpp"
+#include "FileDialogBridge.hpp"
 #include "poly88.h"
 
 class PolyMorphics88 : public EmulatorInterface {
 	Poly88 poly88;
-	std::shared_ptr<MediaQueue> mediaQueue;
+	std::shared_ptr<FileDialogBridge> fileDialogBridge;
 	uint64_t machineCycle = 0;
 	std::thread executionThread;
 	std::atomic<bool> requestThreadExit = false;
@@ -23,9 +23,9 @@ class PolyMorphics88 : public EmulatorInterface {
 		}
 	}
     public:
-	PolyMorphics88(std::shared_ptr<MediaQueue> mediaQueue) :
-		mediaQueue(mediaQueue),
-		poly88(mediaQueue)
+	PolyMorphics88(std::shared_ptr<FileDialogBridge> fileDialogBridge) :
+		fileDialogBridge(fileDialogBridge),
+		poly88(fileDialogBridge)
 	{
 		poly88.memory.LoadROM("POLY-88-EPROM");
 		poly88.Reset();

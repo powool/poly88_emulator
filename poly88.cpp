@@ -24,8 +24,8 @@ static std::vector<std::string> GetArgv(const std::string& inputLine, char delim
 	return argv;
 }
 
-Poly88::Poly88(std::shared_ptr<MediaQueue> mediaQueue) :
-	mediaQueue(mediaQueue)
+Poly88::Poly88(std::shared_ptr<FileDialogBridge> fileDialogBridge) :
+	fileDialogBridge(fileDialogBridge)
 {
 	keyboard = std::make_shared<KeyBoard>(*this, devices);
 	devices.AddDevice(keyboard);
@@ -33,7 +33,7 @@ Poly88::Poly88(std::shared_ptr<MediaQueue> mediaQueue) :
 	devices.AddDevice(std::make_shared<BaudRateGenerator>(*this, devices));
 
 	usart = std::make_shared<Usart>(*this, devices);
-	usartControl = std::make_shared<UsartControl>(*this, devices, usart, mediaQueue);
+	usartControl = std::make_shared<UsartControl>(*this, devices, usart, fileDialogBridge);
 	devices.AddDevice(usart);
 	devices.AddDevice(usartControl);
 
@@ -95,9 +95,9 @@ bool Poly88::Run(uint64_t &machineCycle, bool freeRunning)
 
 	if(Halt())
 	{
-//		fprintf(stderr,"halted\n");
+//		printf("halted\n");
 		MyIntSleep(1000000/60);
-		// allow screen to refresh and keyboard to be immediately polled
+		// allow keyboard to be immediately polled
 		machineCycle = -1;
 		return false;
 	}
@@ -116,5 +116,6 @@ void Poly88::Command()
 
 void Poly88::KeyPress(uint8_t ch)
 {
+//	std::cout << "Inserting character 0x" << std::hex << (uint16_t) ch << std::dec << std::endl;
 	keyboard->Insert(ch);
 }
