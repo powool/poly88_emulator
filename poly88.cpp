@@ -57,7 +57,7 @@ void Poly88::ReadStartupFile()
 			inputLine.pop_back();
 
 		if (inputLine.size()) {
-			std::cout << "read line from .poly88rc: " << inputLine << std::endl;
+//			std::cout << "read line from .poly88rc: " << inputLine << std::endl;
 			auto args = GetArgv(inputLine, ' ');
 			if (RunEmulatorCommand(args)) break;
 		}
