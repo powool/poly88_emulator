@@ -264,7 +264,7 @@ uint8_t Usart::Read()
 
 void Usart::Write(uint8_t data)
 {
-	std::cerr << "usart output byte: " << util::hex(2) << (uint16_t) data << std::endl;
+//	std::cerr << "usart output byte: " << util::hex(2) << (uint16_t) data << std::endl;
 	if(usartFile)
 		usartFile->Write(data);
 	SetInterruptPending(false);
@@ -501,10 +501,12 @@ void UsartControl::Write(uint8_t data)
 		} else if(data == 0x26 || data == 0x21) {
 			if(!usart->usartFile) {
 				std::string filename;
-				if (readFiles.empty()) {
-					std::cout << "starting the mag tape for write!" << std::endl;
-					std::cout << "enter a filename here!!!!" << std::endl;
-					std::cin >> filename;
+				if (writeFiles.empty()) {
+					filename = fileDialogBridge->RequestSaveFile("Open Tape File for Write");
+					if (filename.empty()) {
+						std::cerr << "Tape write cancelled by user." << std::endl;
+						return;
+					}
 				} else {
 					filename = writeFiles.front();
 					writeFiles.pop();
@@ -543,7 +545,7 @@ void UsartControl::Poll()
 		if(usart->usartFile->GetState() == IUsartFile::OUTPUT &&
 			!tapeRunning &&
 			tapeTimeout + 3 < time(nullptr)) {
-			std::cerr << "closing output file." << std::endl;
+//			std::cerr << "closing output file." << std::endl;
 			SetUsartFile(nullptr);
 			usart->SetInterruptPending(false);
 			return;

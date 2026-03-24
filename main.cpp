@@ -235,8 +235,12 @@ class MainWindow : public QMainWindow
 		if (fileDialogBridge->IsRequested()) {
 			QString title = QString::fromStdString(fileDialogBridge->GetTitle());
 			QString dir = QString::fromStdString(fileDialogBridge->GetLastDirectory());
-			QString path = QFileDialog::getOpenFileName(this, title, dir,
-				"Cassette Files (*.cas *.CAS);;All Files (*)");
+			QString filter = "Cassette Files (*.cas *.CAS);;All Files (*)";
+			QString path;
+			if (fileDialogBridge->IsSaveMode())
+				path = QFileDialog::getSaveFileName(this, title, dir, filter);
+			else
+				path = QFileDialog::getOpenFileName(this, title, dir, filter);
 			fileDialogBridge->Respond(path.toStdString());
 		}
 
@@ -307,6 +311,7 @@ class MainWindow : public QMainWindow
 	}
 
 	void keyPressEvent(QKeyEvent *event) override {
+//		if (polyVdi && polyVdi->underMouse()) {
 		if (polyVdi && polyVdi->hasFocus()) {
 			QString text = event->text();
 			if (!text.isEmpty()) {

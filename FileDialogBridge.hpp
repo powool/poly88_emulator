@@ -13,16 +13,33 @@ class FileDialogBridge {
 	std::string selectedPath;
 	std::string dialogTitle;
 	std::string lastDirectory = ".";
+	bool saveMode = false;
 
 public:
-	// Called from emulator thread: blocks until the UI thread provides a path.
-	// Returns the selected file path, or empty string if cancelled.
+	// Called from emulator thread: blocks until the UI thread provides a path (open dialog).
 	std::string RequestFile(const std::string &title = "Open Tape File") {
 		{
 			std::lock_guard lock(mutex);
 			dialogTitle = title;
 			selectedPath.clear();
 			responded = false;
+			saveMode = false;
+		}
+		requested = true;
+
+		std::unique_lock lock(mutex);
+		cv.wait(lock, [this] { return responded; });
+		return selectedPath;
+	}
+
+	// Called from emulator thread: blocks until the UI thread provides a path (save dialog).
+	std::string RequestSaveFile(const std::string &title = "Save Tape File") {
+		{
+			std::lock_guard lock(mutex);
+			dialogTitle = title;
+			selectedPath.clear();
+			responded = false;
+			saveMode = true;
 		}
 		requested = true;
 
@@ -40,6 +57,12 @@ public:
 	std::string GetTitle() {
 		std::lock_guard lock(mutex);
 		return dialogTitle;
+	}
+
+	// Called from UI thread: true if the emulator requested a save dialog.
+	bool IsSaveMode() {
+		std::lock_guard lock(mutex);
+		return saveMode;
 	}
 
 	// Called from UI thread: gets the starting directory for the dialog.
