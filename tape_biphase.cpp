@@ -55,13 +55,13 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
-	Audio audio(argv[optind]);
+	AudioPtr audio = std::make_shared<Audio>(argv[optind]);
 	PolyAudioTapeDecoder decoder(audio);
 	decoder.SetDebug(debug);
 	if (startingIndex) decoder.SetIndex(startingIndex);
 	if(bitRate) decoder.SetBitRate(bitRate);
 
-	audio.SetInvertPhase(invertPhase);
+	audio->SetInvertPhase(invertPhase);
 
 	try {
 		while(true) {
