@@ -2,7 +2,7 @@
 
 #include "i8080_types.h"
 #include "devices.h"
-#include "MediaQueue.hpp"
+#include "FileDialogBridge.hpp"
 
 #include <fstream>
 #include <functional>
@@ -66,10 +66,10 @@ public:
 		}
 		usartState = INPUT;
 		filename = filename;
-		std::cerr << "Open input file: " << filename << std::endl;
+//		std::cerr << "Open input file: " << filename << std::endl;
 	}
 	~UsartInputFile() {
-		std::cerr << "Close input file: " << filename << std::endl;
+//		std::cerr << "Close input file: " << filename << std::endl;
 	}
 	uint8_t Ready() { return !input.eof(); }
 	uint8_t Read() { return input.get(); }
@@ -85,10 +85,10 @@ public:
 	{
 		usartState = OUTPUT;
 		filename = filename;
-		std::cerr << "Open output file: " << filename << std::endl;
+//		std::cerr << "Open output file: " << filename << std::endl;
 	}
 	~UsartOutputFile() {
-		std::cerr << "Close output file: " << filename << std::endl;
+//		std::cerr << "Close output file: " << filename << std::endl;
 	}
 	uint8_t Ready() { return true; }
 	uint8_t Read() { return 0; }
@@ -115,11 +115,11 @@ protected:
 // Usart control
 class UsartControl : public Device
 {
-	std::shared_ptr<MediaQueue> mediaQueue;
+	std::shared_ptr<FileDialogBridge> fileDialogBridge;
 	std::queue<std::string> readFiles;
 	std::queue<std::string> writeFiles;
 public:
-	UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart, std::shared_ptr<MediaQueue> mediaQueue);
+	UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart, std::shared_ptr<FileDialogBridge> fileDialogBridge);
 	void StartUp() override;
 	void ShutDown() override;
 	uint8_t Read() override;

@@ -22,11 +22,12 @@
 #include <QDesktopServices>
 #include <QUrl>
 
+#include <QFileDialog>
+
 #include "PolyMorphics88.hpp"
 #include "Poly88VdiFont.h"
 #include "Poly88Vdi.hpp"
-#include "MediaQueue.hpp"
-#include "MediaPicker.hpp"
+#include "FileDialogBridge.hpp"
 
 // ---------------------------------------------------------------------------
 // Helper: format a register + 16 memory bytes + ASCII representation
@@ -59,15 +60,13 @@ class MainWindow : public QMainWindow
 	std::shared_ptr<PolyMorphics88> emulator;
 	PolyVdi *polyVdi = nullptr;
 
-	// Media
-	std::shared_ptr<MediaQueue> mediaQueue;
-	std::shared_ptr<MediaPicker> mediaPicker;
+	// File dialog bridge for emulator <-> UI thread communication
+	std::shared_ptr<FileDialogBridge> fileDialogBridge;
 
 	// Menu actions
 	QAction *runStopAction  = nullptr;
 	QAction *singleStepAction = nullptr;
 	QAction *resetAction    = nullptr;
-	QAction *mediaPickerAction = nullptr;
 
 	// Toolbar-area widgets
 	QPushButton *runStopButton    = nullptr;
@@ -103,9 +102,6 @@ class MainWindow : public QMainWindow
 
 		resetAction = fileMenu->addAction("Reset");
 		connect(resetAction, &QAction::triggered, this, &MainWindow::ResetEmulator);
-
-		mediaPickerAction = fileMenu->addAction("Media");
-		connect(mediaPickerAction, &QAction::triggered, this, &MainWindow::ToggleMediaPicker);
 
 		fileMenu->addSeparator();
 
@@ -219,11 +215,10 @@ class MainWindow : public QMainWindow
 		centralFrame->setLayout(mainLayout);
 		this->setCentralWidget(centralFrame);
 
-		// ---- Media subsystem ----
-		mediaQueue = std::make_shared<MediaQueue>();
-		mediaPicker = std::make_shared<MediaPicker>(mediaQueue, ".");
+		// ---- File dialog bridge ----
+		fileDialogBridge = std::make_shared<FileDialogBridge>();
 
-		emulator = std::make_shared<PolyMorphics88>(mediaQueue);
+		emulator = std::make_shared<PolyMorphics88>(fileDialogBridge);
 
 		polyVdi->setFocusPolicy(Qt::StrongFocus);
 
@@ -237,9 +232,12 @@ class MainWindow : public QMainWindow
 	int CpuSpeed() { return cpuSpeed; }
 
 	void UpdateUI() {
-		auto mediaWanted = mediaQueue->MediaWanted();
-		if (mediaWanted) {
-			mediaPicker->ShowPicker();
+		if (fileDialogBridge->IsRequested()) {
+			QString title = QString::fromStdString(fileDialogBridge->GetTitle());
+			QString dir = QString::fromStdString(fileDialogBridge->GetLastDirectory());
+			QString path = QFileDialog::getOpenFileName(this, title, dir,
+				"Cassette Files (*.cas *.CAS);;All Files (*)");
+			fileDialogBridge->Respond(path.toStdString());
 		}
 
 		// Menu labels & enabled state
@@ -308,13 +306,6 @@ class MainWindow : public QMainWindow
 			closed = true;
 	}
 
-	void ToggleMediaPicker() {
-		if (mediaPicker->isVisible())
-			mediaPicker->HidePicker();
-		else
-			mediaPicker->ShowPicker();
-	}
-
 	void keyPressEvent(QKeyEvent *event) override {
 		if (polyVdi && polyVdi->hasFocus()) {
 			QString text = event->text();
@@ -329,8 +320,6 @@ class MainWindow : public QMainWindow
 	}
 
 	void closeEvent(QCloseEvent *event) override {
-		if (mediaPicker)
-			mediaPicker->close();
 		closed = true;
 	}
 };
