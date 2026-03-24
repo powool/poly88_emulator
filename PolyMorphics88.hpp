@@ -2,17 +2,19 @@
 #include <atomic>
 #include <thread>
 #include "EmulatorInterface.h"
+#include "MediaQueue.hpp"
 #include "poly88.h"
 
 class PolyMorphics88 : public EmulatorInterface {
 	Poly88 poly88;
+	std::shared_ptr<MediaQueue> mediaQueue;
 	uint64_t machineCycle = 0;
 	std::thread executionThread;
 	std::atomic<bool> requestThreadExit = false;
 	std::atomic<bool> running = false;
 	void ExecutionThread() {
 		while(!requestThreadExit) {
-			if (running) {
+			if (running && !poly88.Halt()) {
 				// let poly88 do any rate limiting on speed
 				poly88.Run(machineCycle, true);
 			} else {
@@ -21,7 +23,10 @@ class PolyMorphics88 : public EmulatorInterface {
 		}
 	}
     public:
-	PolyMorphics88() {
+	PolyMorphics88(std::shared_ptr<MediaQueue> mediaQueue) :
+		mediaQueue(mediaQueue),
+		poly88(mediaQueue)
+	{
 		poly88.memory.LoadROM("POLY-88-EPROM");
 		poly88.Reset();
 		poly88.InterruptEnable(false);
