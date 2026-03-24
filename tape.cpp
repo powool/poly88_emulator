@@ -1,8 +1,13 @@
+#include <cmath>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <string>
+#include <stdexcept>
+#include <tuple>
 #include <vector>
 
 #include <getopt.h>
@@ -10,373 +15,362 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-/*
- * loop until we die
- * 1 if we don't have bit sync, move ahead one quarter wave and re-sync
- * 2 if we don't have byte sync, move ahead one bit
- * 3 if we don't have an e6, go back to 1
- * 4 print
- *
- *
- *
- */
-
-template<typename T>
-std::ostream &operator << (std::ostream &stream, const std::vector<T> &vec)
-{
-	for(auto i = 0; i < vec.size(); i++)
-		stream << std::dec << i << ": " << vec[i] << std::endl;
-}
-
-// Thrown when we don't get a clean 0/1 bit.
-// Tweak timebase by some fraction of a wave.
-class BitSyncError : public std::domain_error {
+class ReadError : std::runtime_error {
 public:
-	BitSyncError(const char *s) : std::domain_error(s) {;}
+	ReadError(const char *s) : std::runtime_error(s) {;}
 };
 
-// Thrown when we don't get a 1 for a start bit.
-// Resync timebase to the next full bit (3.33ms)
-class ByteSyncError : public std::domain_error {
+class WaveHeader {
+	struct RIFFHeader {
+		char	RIFF[4];	// 'RIFF'
+		uint32_t	size;	//
+		char	WAVE[4];	// 'WAVE'
+	};
+
+	struct ChunkHeader {
+		char		format[4];	// 'fmt '
+		uint32_t	chunkSize;	// sizeof(ChunkHeader)
+		uint16_t	dataFormat;	// 0x0001
+		uint16_t	channels;	// 0x0001
+		uint32_t	samplesPerSecond;	// 44100
+		uint32_t	bytesPerSecond;	// 0x00015888
+		uint16_t	sampleSize;	// 0x0002 (16-bit mono)
+		uint16_t	bitsPerSample;	// 0x0010
+	};
+
+	struct DataHeader {
+		char		ID[4];	// 'data'
+		uint32_t	size;	//
+	};
+
 public:
-	ByteSyncError(const char *s) : std::domain_error(s) {;}
+	static int Size() {
+		// probably not safe/portable:
+		return sizeof(RIFFHeader) + sizeof(ChunkHeader) + sizeof(DataHeader);
+	}
+	static uint32_t DataSize(const char *header) {
+		int dataHeaderOffset = sizeof(RIFFHeader) + sizeof(ChunkHeader);
+
+		const DataHeader *dataHeader = reinterpret_cast<const DataHeader *>(header + dataHeaderOffset);
+		return dataHeader->size;
+	}
+
+	static uint32_t SampleSize(const char *header) {
+		int chunkHeaderOffset = sizeof(RIFFHeader);
+
+		const ChunkHeader *chunkHeader = reinterpret_cast<const ChunkHeader *>(header + chunkHeaderOffset);
+		return chunkHeader->sampleSize;
+	}
 };
 
-//
-// Read WAV file waveforms, converting samples
-// to zero crossings, direction, and time base.
-//
-class TapeWaveReader {
+class Audio {
+	std::unique_ptr<int16_t []>	wavData;
+	int sampleCount;
 public:
-	TapeWaveReader(const char *fileName) {
+	Audio(const std::string &fileName) {
 		struct stat b;
 
-		if(stat(fileName, &b))
-		{
+		if(stat(fileName.c_str(), &b)) {
 			perror((std::string() + "can't stat " + fileName).c_str());
 			exit(1);
 		}
 
-		m_wav.resize(b.st_size);
+		if (b.st_size < WaveHeader::Size()) {
+			throw(std::invalid_argument(std::string() + "can't open file: " + fileName + ": truncated header"));
+		}
 
 		std::ifstream inputStream(fileName);
-		if(!inputStream.good())
+
+		if(!inputStream.good()) {
 			throw(std::invalid_argument(std::string() + "can't open file: " + fileName));
+		}
 
-		inputStream.read(reinterpret_cast<char *>(&m_wav[0]), m_wav.size());
-	}
-	double TimeOfNextZeroCrossing(double t) {
-		auto index = Time2Index(t);
-		auto startingSign = Sign(index);
-		if(startingSign == 0)
-			return t;
-		while(Sign(++index) == startingSign) {;}
-		return Index2Time(index);
-	}
+		auto headerData = std::make_unique<char []>(WaveHeader::Size());
 
-	double FullWaveTime(uint64_t hz) {
-		return (1.0 / hz);
-	}
+		inputStream.read(&(headerData[0]), WaveHeader::Size());
 
-	double HalfWaveTime(uint64_t hz) {
-		return FullWaveTime(hz) / 2.0;
-	}
+		auto dataSize = WaveHeader::DataSize(&(headerData[0]));
 
-	double QuarterWaveTime(uint64_t hz) {
-		return FullWaveTime(hz) / 4.0;
+		if (dataSize + WaveHeader::Size() > b.st_size) {
+			throw(std::invalid_argument(std::string() + "can't open file: " + fileName + ": truncated data"));
+		}
+
+		sampleCount = dataSize / WaveHeader::SampleSize(&(headerData[0]));
+
+		wavData = std::make_unique<int16_t []>(sampleCount);
+
+		inputStream.read(reinterpret_cast<char *>(&(wavData[0])), dataSize);
 	}
 
-protected:
-	std::string	m_fileName;
-	std::vector<uint8_t>	m_wav;
-	bool	m_phase = true;
-	double Index2Time(uint64_t t) {
-		return t / 44100.0;
+	int Negative(int index) {
+		return std::signbit(wavData[index]);
 	}
-	uint64_t Time2Index(double t) {
-		return 44100.0 * t;
+	int16_t Value(int index) {
+		return wavData[index];
 	}
-	int32_t Sign(uint64_t index) {
-		auto value = Value(index);
-		if(value < 0x80) return -1;
-		if(value == 0x80) return 0;
-		return 1;
+
+	// XXX get the header and use it:
+	int SampleRate() { return 44100; }
+	int SampleCount() { return sampleCount; }
+
+	// samples per second / bits per second => samples per bit
+	int SamplesPerBit(int bitRate) { return SampleRate() / bitRate; }
+
+	double TimeOffset(int index) {
+		return double(index) / SampleRate();
 	}
-	uint8_t Value(uint64_t index) {
-		if(index >= m_wav.size())
-			throw std::out_of_range("oopsie, used all your dataz");
-		if(m_phase)
-			return m_wav[index];
-		else
-			return 0xff - m_wav[index];
+
+	int FindThisOrNextZeroCrossing(int index, int bitRate) {
+		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
+		
+		// skip to next negative to positive signal transition
+		while (index < lastIndex) {
+			if (Negative(index) && !Negative(index + 1)) {
+				break;
+			}
+			index++;
+		}
+		return index;
 	}
-	uint64_t AudacityIndex(double t) {
-		return Time2Index(t) - 0x2c;
+	int FindNearestZeroCrossing(int index, int bitRate) {
+		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
+		
+		// find nearest negative to positive signal transition
+		for (int distance = 0; distance < SamplesPerBit(bitRate); distance++) {
+			if (Negative(index + distance) && !Negative(index + distance + 1)) {
+				index += distance;
+				break;
+			}
+			if (Negative(index - distance) && !Negative(index - distance + 1)) {
+				index -= distance;
+				break;
+			}
+		}
+
+		return index;
 	}
-	uint64_t AudacityIndex(uint64_t t) {
-		return t - 0x2c;
+
+	void Dump(std::ostream &stream, int index) {
+		stream << index << ", " << TimeOffset(index) << "s: ";
+		for(auto i = index - 3; i < index; i++) {
+			stream << " " << Value(i);
+			if (i < index - 1) stream << ", ";
+		}
+		stream << " (";
+		stream << " " << Value(index) << ") ";
+		for(auto i = index + 1; i < index + 4; i++) {
+			stream << " " << Value(i);
+			if (i < index + 3) stream << ", ";
+		}
+		stream << std::endl;
 	}
 };
 
-//
-// Decode bits at some time t
-//
-class TapeBitReader : public TapeWaveReader {
-protected:
-	const double bitTime = 1.0 / 300.0;
-public:
-	TapeBitReader(const char * fileName) : TapeWaveReader(fileName) {;}
+std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
+	int samplesPerBit = audio.SamplesPerBit(bitRate);
+	int initialIndex = index;
 
-	// Given a time index in seconds, determine if either a 0 or 1
-	// bit appears to be encoded there
-	//
-	// 1200HZ => 0 bit
-	// 2400HZ => 1 bit
-	// 8 zero crossings => 0 bit
-	// 16 zero crossings => 1 bit
-	bool Bit(double t) {
+	// samples per second / cycles per second / 2 => samples per half wave cycle:
+	int halfWave2400HZSampleCount = audio.SampleRate() / 2400 / 2;
 
-//		std::cerr << AudacityIndex(t) << ": Start decode of bit.\n";
+	// On transitions from 0 (1200HZ) to 1 (2400HZ), there seems to
+	// be significant skew in the 2400HZ waveform, causing the first cycle
+	// of the following 1 to be included in the current 0.
+	// NB: does this heuristic introduce problems elsewhere?
+	auto lastIndex = index + samplesPerBit - halfWave2400HZSampleCount;
 
-		// We could just count them, but for the moment,
-		// track the time the zero crossings occur, as well
-		// (not used at the present time).
-		std::vector<double> zeroCrossings;
-		std::vector<uint64_t> zeroCrossingIndex;
+	int fullWaveCount = 0;
+	int indexOfLastPeak = std::numeric_limits<int>::max();
 
-		// define the end of interval in which a single bit is encoded
-		double intervalEnd = t + bitTime;
+#if 0
+	std::cout << index << ", " << audio.TimeOffset(index) << "s: start reading bit" << std::endl;
+#endif
 
-		// now count zero crossings inside the time interval
-		// [t,intervalEnd]
-		while(t < intervalEnd) {
-			auto nextCrossing = TimeOfNextZeroCrossing(t);
-			zeroCrossings.push_back(nextCrossing);
-			zeroCrossingIndex.push_back(AudacityIndex(nextCrossing));	// debug
-			t = nextCrossing + QuarterWaveTime(2400);
-//			t += QuarterWaveTime(2400);	// the high freq is 2400HZ, just bump halfway into the shortest wave
+	while (index < lastIndex) {
+		// count peaks - but don't use adjacent samples, as they can be noisy:
+		if (!audio.Negative(index) && audio.Value(index - 1) <= audio.Value(index) && audio.Value(index) >= audio.Value(index+1)) {
+			if (abs(indexOfLastPeak - index) > 10) {
+				fullWaveCount++;
+				indexOfLastPeak = index;
+			}
 		}
-
-		// These checks are heuristic - we have a couple of challenges, a)
-		// actually find the bit, b) do it in such a way that we can re-sync
-		// on the waveforms.
-
-		// in 3.333ms, if we see exactly 8 crossings, that is 1200HZ, so allow some slop
-		if(zeroCrossings.size() >= 5 && zeroCrossings.size() <= 10)
-			return false;
-
-		// in 3.333ms, if we see exactly 16 crossings, that is 2400HZ, so allow some slop
-		if(zeroCrossings.size() >= 11 && zeroCrossings.size() <= 20)
-			return true;
-
-		// This should be unusual. From what I've seen, we certainly would expect
-		// quite a few at the beginning of the audio track (i.e. before the
-		// casette interface even turns on). However, during the normal part of
-		// audio file, I see very few cases where this should actually happen.
-		#if 0
-		// get noisy if we're well into the data part of the track
-		if(t > 30) {
-			std::cerr << zeroCrossingIndex;
-			std::cerr << AudacityIndex(t) << ": unexpected loss of bit sync. Fix.\n";
-		}
-		#endif
-		throw BitSyncError("lost bit sync - adjust timebase forward by half or quarter wave.");
+		index++;
 	}
 
-	// It should be near, but won't be exactly at the start of a bit
-	// that changed from high to low, so previous zero crossings
-	// should be fast, next ones slow, pick the zero crossing that
-	// bisects the two.
-	double ResyncAtBitChange(double t, bool bit = true) {
-
-		// pick a spot a few fast cycles back (at 2400HZ, we have 8 to choose from, pick 3)
-		t -= 3 * FullWaveTime(bit ? 2400 : 1200);
-
-		// find a zero crossing after that
-		auto firstCrossing = TimeOfNextZeroCrossing(t);
-		while(true) {
-			auto nextCrossing = TimeOfNextZeroCrossing(firstCrossing + QuarterWaveTime(2400));
-			auto period = nextCrossing - firstCrossing;	// this is the period of a half wave
-
-			// We shouldn't have to worry too much about getting the exact wave,
-			// as we have a little bit of leeway.
-			if(bit) {
-				if(period >= HalfWaveTime(1800))
-					return firstCrossing;
-			} else {
-				if(period < HalfWaveTime(1800))
-					return firstCrossing;
-			}
-
-			firstCrossing = nextCrossing;
-		}
-		// The above loop throws when we run out of data.
+	// recode full wave count found to 0 or 1 bit
+	int resultBit;
+	switch(fullWaveCount) {
+		case 3:
+		case 4:
+		case 5:
+			resultBit = 0;
+			break;
+		case 7:
+		case 8:
+		case 9:
+			resultBit = 1;
+			break;
+		default:
+			resultBit = 2;
+			std::cout << initialIndex << ", " << audio.TimeOffset(initialIndex) << "s: fullWaveCount = " << fullWaveCount << " lost sync" << std::endl;
+			break;
 	}
 
-	//
-	double SyncClockToBitChange(double t) {
-		while(true) {
-			try {
-				auto bit1 = Bit(t);
-				auto bit2 = Bit(t + bitTime);
-
-				if(bit1 && !bit2) {
-					t = ResyncAtBitChange(t + bitTime, true);
-					return t;
-				}
-				if(!bit1 && bit2) {
-					t = ResyncAtBitChange(t + bitTime, false);
-					return t;
-				}
-			} catch(BitSyncError e) {
-				// Ignore bit sync error here
-			}
-			t += HalfWaveTime(2400);
-		}
-	}
-};
-
-class ByteFormatTapeReader : public TapeBitReader {
-	bool m_sync = false;
-public:
-	ByteFormatTapeReader(const char * fileName) : TapeBitReader(fileName) {;}
-	std::pair<uint8_t, double> Byte(double t) {
-		auto startBit = Bit(t);
-
-		if(!startBit)
-			throw ByteSyncError("failed to find start bit - adjust timebase forward 1 bit");
-
-//		std::cerr << "yaaay! got a start bit!!\n";
-
-		t += bitTime;
-
-		uint8_t byte = 0;
-		bool previousBit = true;	// previous bit was the start bit
-		for(auto bit = 0; bit < 8; bit++) {
-			auto thisBit = Bit(t);
-			if(thisBit) {
-				byte |= 1 << bit;
-				previousBit = thisBit;
-			}
-
-			if(previousBit && !thisBit) {
-				auto tNew = ResyncAtBitChange(t);
-				std::cerr << AudacityIndex(t) << ": Resync to: " << AudacityIndex(tNew) << " - was that an improvement?\n";
-				t = tNew;
-				previousBit = thisBit;
-			}
-
-			t += bitTime;
-		}
-
-		// skip two filler bits
-		t += bitTime;
-		t += bitTime;
-		return std::make_pair(byte, t);
-	}
-
-	// Now we'll sync till we get an 0xe6, then call ourselves in
-	// sync and return bytes until we're out of sync or throw on
-	// end of sound data.
-	std::pair<uint8_t, double> ReadByteAndSync(double t) {
-		uint64_t syncCount = 0;
-		if(!m_sync) {
-			auto tNew = SyncClockToBitChange(t);
-			std::cerr << AudacityIndex(t) << ": Resync to: " << AudacityIndex(tNew) << " - was that an improvement?\n";
-			t = tNew;
-		}
-		while(true) {
-			try {
-				auto result = Byte(t);
-				if(result.first == 0xe6 || m_sync) {
-					m_sync = true;
-					return result;
-				}
-
-				// We got a full byte, with no exceptions, but we aren't
-				// in sync, so we need to move forward a single bit until
-				// we can decode our sync 0xe6 bytes.
-			} catch (BitSyncError e) {
-				if(t>30)
-					std::cerr << std::dec << syncCount << ": lost bit sync at time " << t << " (" << e.what() << "), moving ahead one bitTime.\n";
-
-				if(m_sync && t>10) abort();
-
-				m_sync = false;
-
-				syncCount++;
-			} catch (ByteSyncError e) {
-				if(t>30)
-					std::cerr << std::dec << syncCount << ": lost byte sync at time " << t << " (" << e.what() << "), moving ahead one bitTime.\n";
-				// We failed to see a 1 start bit, so move ahead one bit.
-				m_sync = false;
-				syncCount++;
-			}
-
-			t += bitTime - QuarterWaveTime(2400);
-			t = TimeOfNextZeroCrossing(t);
-		}
-	}
-};
-
-void usage(int argc, char **argv)
-{
-	std::cerr << "usage: " << argv[0] << " [WAV poly 88 file]" << std::endl;
+	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak, 300));
 }
 
-/*
- * stuff to set:
- *    wave file samples/second
- *    expected bit rate (2400/4800/9600 bps)
- *    phase
- *    filename.wav
- */
-int main(int argc, char **argv)
-{
+std::pair<int, int> BitDecodePolyPhaseEncodedBit(Audio &audio, int index, int bitRate) {
+	// not implemented
+	return std::make_pair(0, 0);
+}
 
-	int opt;
-	bool phase = false;
-	bool debug = false;
-	uint8_t lower = 120;
-	uint8_t upper = 134;
+class Uart {
+	bool debug;
+	const int bitRate = 300;	// bit per second
+	std::pair<int, int> (*bitDecoder)(Audio &, int, int);
+	bool inBitSync;
 
-	while ((opt = getopt(argc, argv, "dl:pu:")) != -1) {
-		switch(opt) {
-			case 'd':
-				debug = true;
-				break;
-			case 'l':
-				lower = strtoul(optarg, NULL, 10);
-				break;
-			case 'p':
-				phase = !phase;
-				break;
-			case 'u':
-				upper = strtoul(optarg, NULL, 10);
-				break;
-			default:
-				usage(argc, argv);
-				exit(1);
-		}
+public:
+	Uart(std::pair<int, int> (*bitDecoder)(Audio &, int, int)) {
+		debug = false;
+		inBitSync = false;
+		this->bitDecoder = bitDecoder;
 	}
 
-	if(optind >= argc) {
-		usage(argc, argv);
-		exit(1);
+	void SetDebug(int debug) { this->debug = debug; }
+
+	std::pair<int, int> BitRead(Audio &audio, int index) {
+//		index = audio.FindNearestZeroCrossing(index, bitRate);
+		return bitDecoder(audio, index, bitRate);
 	}
 
-	auto byteReader = std::make_shared<ByteFormatTapeReader>(argv[optind]);
-	double t = 3.0;
-	try {
-		while(true) {
-			auto result = byteReader->ReadByteAndSync(t);
-			
-			std::cout << "read byte: " << std::hex << (uint32_t) result.first << "\n";
+	// return the index of the next valid bit, throw on out of data
+	int SyncToValidBit(Audio &audio, int index) {
+		auto lastIndex = audio.SampleCount() - 2 * audio.SamplesPerBit(bitRate);
+		while(index < lastIndex) {
+			index = audio.FindThisOrNextZeroCrossing(index, bitRate);
 
-			t = result.second;
+			auto bit = BitRead(audio, index);
+			if (bit.first == 0 || bit.first == 1) {
+				return index;
+			}
+
+			// skip to next sample
+			index++;
 		}
-	} catch(std::out_of_range e)
-	{
-		std::cout << "\n";
+		throw ReadError("ran out of data");
+	}
+
+	// A byte on tape is encoded as a single start bit (value=0),
+	// followed by 8 data bits, then ending with a pair of stop
+	// bits (also value 0).
+	// Any time we fall out of sync (e.g. BitRead returns a value
+	// of 2), we need to re-sync appropriately.
+	// The return tuple looks like this:
+	//   resulting data byte (guaranteed to be valid)
+	//   synchronized index of waveform immediately following last stop bit
+	//   synchronized index of waveform of start bit
+	//
+	// Synchronization is a bit sticky. On the poly-88, the processor
+	// loops, reading a byte - if it sees an 0xe6, it is done, otherwise,
+	// it resets the uart to start at a new bit offset in the stream,
+	// and repeats until it gets an 0xe6.
+	//
+	// This byte reading code is working a little differently, choosing
+	// to reset when we don't get the right stop bits. I'm not sure this
+	// is a very good approach yet.
+	//
+	// If we run out of data to return, we throw an exception
+	std::pair<int, int> ByteRead(Audio &audio, int index) {
+		int samplesPerBit = audio.SamplesPerBit(300);
+		uint8_t resultByte = 0;
+
+		std::pair<int, int> startBit;
+
+		startBit = BitRead(audio, index);
+
+		if (startBit.first != 0) {
+			return std::make_pair(256, 0);
+		}
+
+		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(startBit.first) << std::dec << " start bit" << std::endl;
+
+		index = startBit.second;
+
+		int bitIndex;
+		// in theory, we have a stop bit, now get 8 data bits
+		for(bitIndex = 0; bitIndex < 8; bitIndex++) {
+			auto dataBit = BitRead(audio, index);
+
+			if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(dataBit.first) << std::dec << " data bit #" << bitIndex << std::endl;
+
+			if(dataBit.first == 1) {
+				resultByte |= 1 << bitIndex;
+			}
+
+			if(dataBit.first == 2) {
+				return std::make_pair(256, index);
+			}
+
+			index = dataBit.second;
+		}
+
+		// now check for two stop bits
+
+		auto firstStopBit = BitRead(audio, index);
+
+		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(firstStopBit.first) << std::dec << " first stop bit" << std::endl;
+
+		// if we do not have a first stop bit (valid bit and value 0), then move ahead a bit and repeat
+		// attempting to read a byte
+		if (firstStopBit.first != 1) {
+			return std::make_pair(256, index);
+		}
+
+		index = firstStopBit.second;
+
+		auto secondStopBit = BitRead(audio, index);
+
+		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(secondStopBit.first) << std::dec << " second stop bit" << std::endl;
+
+		if (secondStopBit.first != 1) {
+			return std::make_pair(256, index);
+		}
+
+		index = secondStopBit.second;
+
+		return std::make_pair(resultByte, index);
+	}
+};
+
+int main(int argc, const char **argv) {
+	int debug = true;
+	Audio audio("poly_basic_a00_byte_format.wav");
+	Uart uart(DecodeByteEncodedBit);
+	uart.SetDebug(debug);
+
+	std::tuple<uint8_t, int, int> tuple;
+	auto index = 701408;
+//	index = 701778;
+//	index = 6935244;
+//	index = 711569 - 10;
+	index = 708282;
+
+	int samplesPerBit = audio.SamplesPerBit(300);
+	index = uart.SyncToValidBit(audio, index);
+	while(true) {
+		if (debug) {
+			audio.Dump(std::cout, index);
+		}
+//		index = audio.FindNearestZeroCrossing(index, 300);
+		auto byte = uart.ByteRead(audio, index);
+		if (byte.first == 256) {
+			index += 4;		// skip 4 samples
+			index = uart.SyncToValidBit(audio, index);
+			continue;
+		}
+		std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(byte.first) << std::dec << std::endl;
+		// 1 start bit, 8 data bits, 2 stop bits == 11 total:
+		index = byte.second;
 	}
 }
