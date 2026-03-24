@@ -71,8 +71,8 @@ public:
 	{
 		if(m_inputPorts[port])
 			return m_inputPorts[port]->Read();
-		else
-			std::cerr << "attempt to read from bad port " << static_cast<uint16_t>(port) << std::endl;
+		std::cerr << "attempt to read from bad port " << static_cast<uint16_t>(port) << std::endl;
+		return 0;
 	}
 	void OutputTo(byte_t port, byte_t val)
 	{
