@@ -29,12 +29,9 @@ I8080::I8080()
 		m_PSWTable[i].parity = (~ringsum)&0x01;
 	}
 
-	m_debug = true;
 	m_regPC_breakpoint = 0x0;
 	m_regPC_watchpoint = 0;
 	m_watchpoint_location = 0x0c0e;
-	m_debug_on = 0x0c80;
-	m_debug_off = 0x0cff;
 }
 
 I8080::~I8080()

@@ -36,8 +36,6 @@ private:
 	uint16_t m_regPC_breakpoint;
 	uint16_t m_regPC_watchpoint;
 	uint16_t m_watchpoint_location;
-	uint16_t m_debug_on;
-	uint16_t m_debug_off;
 
 	uint8_t  m_regA;
 
@@ -88,9 +86,6 @@ public:
 	I8080();
 	~I8080();
 	void DumpState() const;
-
-	bool Debug() const {return m_debug;}
-	bool Debug(bool b) {m_debug = b; return m_debug;}
 
 	void Reset() { m_regPC = 0; }
 
