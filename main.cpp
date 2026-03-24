@@ -148,14 +148,33 @@ static const char *darkStyleSheet = R"(
 	QPushButton#runStopBtn[running="true"]:hover {
 		background-color: #eba0ac;
 	}
-	QPushButton#resetBtn {
-		background-color: #fab387;
+	QPushButton#stepBtn {
+		background-color: #a6e3a1;
 		color: #1e1e2e;
-		border-color: #fab387;
+		border-color: #a6e3a1;
+		font-weight: bold;
+	}
+	QPushButton#stepBtn:hover {
+		background-color: #94e2d5;
+	}
+	QPushButton#stepBtn:disabled {
+		background-color: #1e1e2e;
+		color: #585b70;
+		border-color: #313244;
+	}
+	QPushButton#resetBtn {
+		background-color: #f38ba8;
+		color: #1e1e2e;
+		border-color: #f38ba8;
 		font-weight: bold;
 	}
 	QPushButton#resetBtn:hover {
-		background-color: #f9e2af;
+		background-color: #eba0ac;
+	}
+	QPushButton#resetBtn:disabled {
+		background-color: #1e1e2e;
+		color: #585b70;
+		border-color: #313244;
 	}
 	QGroupBox {
 		background-color: #181825;
@@ -491,6 +510,7 @@ class MainWindow : public QMainWindow
 		toolbarRow->addWidget(runStopButton);
 
 		singleStepButton = new QPushButton("Step");
+		singleStepButton->setObjectName("stepBtn");
 		singleStepButton->setToolTip("Execute one instruction (F10)");
 		connect(singleStepButton, &QPushButton::clicked, this, &MainWindow::SingleStep);
 		toolbarRow->addWidget(singleStepButton);
@@ -920,7 +940,8 @@ class MainWindow : public QMainWindow
 	}
 
 	void closeEvent(QCloseEvent *event) override {
-		closed = true;
+		event->ignore();
+		ConfirmQuit();
 	}
 };
 
