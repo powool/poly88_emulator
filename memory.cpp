@@ -10,7 +10,7 @@
 #define MEM_SIZE 65536
 #define MAX_STRING 1024
 
-extern int debug;
+int debug = false;
 
 void Memory::LoadROM(const char *name)
 {
@@ -85,17 +85,6 @@ void Memory::LoadRAM(const char *name)
 
 Memory::Memory()
 {
-	auto dimensions = Cvdi_font::GetDimensions();
-    screen.set_size(64 * dimensions.first, 16 * dimensions.second);
-
-    if(screen.open())
-    {
-        screen.close();
-		throw std::runtime_error("failed to open SDL screen.");
-    }
-
-    vdi_font = std::unique_ptr<Cvdi_font>(new Cvdi_font(screen.renderer()));
-
     debug = FALSE;
     if(::debug) std::cerr<<"starting up memory...\n";
 
@@ -119,18 +108,6 @@ void Memory::set_byte(i8080_addr_t a, byte_t v)
 	if(a >= guardLow && a<guardHigh) return;
 
     ram[a] = v;
-    if(a>=0xf800)
-    {
-        int row = (a >> 6) & 0xf;
-        int col = a & 0x3f;
-
-        SDL_Rect destination;
-        destination.x = col * vdi_font->width();
-        destination.y = row * vdi_font->height();
-        destination.w = vdi_font->width();
-        destination.h = vdi_font->height();
-        screen.blit2screen((*vdi_font)[v], destination);
-    }
 }
 
 void Memory::set_2byte(i8080_addr_t a, i8080_addr_t v)
