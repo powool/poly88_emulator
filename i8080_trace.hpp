@@ -8,6 +8,7 @@ class I8080Trace {
 	uint16_t oldPC;
 	uint16_t lowRange;
 	uint16_t highRange;
+	bool active;
 public:
 	enum eWhat {
 		PC,
@@ -37,11 +38,21 @@ public:
 		when(_when),
 		action(_action),
 		lowRange(low),
-		highRange(high)
+		highRange(high),
+		active(true)
 	{
 		;
 	}
 	bool inRange(uint16_t value) {
 		return value >= lowRange && value <= highRange;
+	}
+	bool equal(uint16_t value) {
+		return value == lowRange;
+	}
+	void toggleActive() {
+		active = !active;
+	}
+	bool getActive() {
+		return active;
 	}
 };
