@@ -5,7 +5,8 @@
 class EmulatorInterface {
     public:
 	virtual uint8_t GetMemoryByte(uint16_t address) const = 0;
-	virtual uint8_t GetMemoryInt(uint16_t address) const = 0;
+	virtual uint16_t GetMemoryInt(uint16_t address) const = 0;
+	virtual void PutMemoryByte(uint16_t address, uint8_t byte) = 0;
 
 	virtual void RunOneInstruction() = 0;
 	virtual void Reset() = 0;

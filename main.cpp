@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <filesystem>
+#include <fstream>
 
 #include <QApplication>
 #include <QHBoxLayout>
@@ -74,6 +75,7 @@ class MainWindow : public QMainWindow
 	QAction *runStopAction  = nullptr;
 	QAction *singleStepAction = nullptr;
 	QAction *resetAction    = nullptr;
+	QAction *loadImageAction = nullptr;
 
 	// Toolbar-area widgets
 	QPushButton *runStopButton    = nullptr;
@@ -118,6 +120,9 @@ class MainWindow : public QMainWindow
 
 		resetAction = fileMenu->addAction("Reset");
 		connect(resetAction, &QAction::triggered, this, &MainWindow::ResetEmulator);
+
+		loadImageAction = fileMenu->addAction("Load Image");
+		connect(loadImageAction, &QAction::triggered, this, &MainWindow::LoadImage);
 
 		auto *prefsAction = fileMenu->addAction("Preferences...");
 		connect(prefsAction, &QAction::triggered, this, &MainWindow::ShowPreferences);
@@ -282,6 +287,7 @@ class MainWindow : public QMainWindow
 		runStopAction->setText(emulator->Running() ? "Stop" : "Run");
 		singleStepAction->setEnabled(!emulator->Running());
 		resetAction->setEnabled(!emulator->Running());
+		loadImageAction->setEnabled(!emulator->Running());
 
 		// Buttons
 		runStopButton->setText(emulator->Running() ? "Stop" : "Run");
@@ -400,6 +406,32 @@ class MainWindow : public QMainWindow
 			uiFont = chosenFont;
 			ApplyFont();
 		}
+	}
+
+	void LoadImage() {
+		if (emulator->Running()) return;
+		QString path = QFileDialog::getOpenFileName(this, "Load Image", ".",
+			"Image Files (*.img *.IMG);;All Files (*)");
+		if (path.isEmpty()) return;
+
+		std::ifstream file(path.toStdString(), std::ios::binary);
+		if (!file) {
+			QMessageBox::warning(this, "Load Image", "Could not open file.");
+			return;
+		}
+
+		constexpr uint16_t baseAddress = 0x2000;
+		constexpr size_t maxSize = 55296;
+		uint16_t address = baseAddress;
+		size_t count = 0;
+		char byte;
+		while (file.get(byte) && count < maxSize) {
+			emulator->PutMemoryByte(address, static_cast<uint8_t>(byte));
+			address++;
+			count++;
+		}
+
+		UpdateUI();
 	}
 
 	void ConfirmQuit() {

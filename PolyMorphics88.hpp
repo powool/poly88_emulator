@@ -42,8 +42,12 @@ class PolyMorphics88 : public EmulatorInterface {
 		return poly88.memory.get_byte(address);
 	}
 
-	uint8_t GetMemoryInt(uint16_t address) const override {
+	uint16_t GetMemoryInt(uint16_t address) const override {
 		return poly88.memory.get_byte(address) | (poly88.memory.get_byte(address+1) << 8);
+	}
+
+	void PutMemoryByte(uint16_t address, uint8_t byte) {
+		poly88.memory.set_byte(address, byte);
 	}
 
 	void RunOneInstruction() override {
