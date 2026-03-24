@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory"
+#include <memory>
 #include "i8080_types.h"
 #include "sdl.h"
 #include "vdi_font.h"
