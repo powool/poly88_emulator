@@ -14,7 +14,7 @@ public:
 	Poly88();
 	~Poly88();
 
-	bool Run(uint64_t &machineCycle);
+	bool Run(uint64_t &machineCycle, bool freeRunning = true);
 	void Command();
 
 	void ReadStartupFile();
@@ -26,4 +26,5 @@ public:
 
 	void LoadROM(const char *filename) { memory.LoadROM(filename); }
 	void LoadRAM(const char *filename) { memory.LoadRAM(filename); }
+	void KeyPress(uint8_t ch);
 };
