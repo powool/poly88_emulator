@@ -29,6 +29,7 @@ qt_add_executable(${PROJECT_NAME}
 	poly88_devices.cpp
 	MediaPicker.cpp
 	Keyboard.cpp
+	TieredMemory.cpp
 )
 
 # Link it all up
