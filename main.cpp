@@ -23,6 +23,8 @@
 #include <QDesktopServices>
 #include <QUrl>
 
+#include <QLineEdit>
+#include <QMouseEvent>
 #include <QFileDialog>
 #include <QPlainTextEdit>
 #include <QTextCursor>
@@ -244,6 +246,13 @@ class MainWindow : public QMainWindow
 		pcLabel->setFont(QFont("Monospace", 9));
 		mainLayout->addWidget(pcLabel);
 
+		// Make register labels clickable for editing
+		bcLabel->installEventFilter(this);
+		deLabel->installEventFilter(this);
+		hlLabel->installEventFilter(this);
+		spLabel->installEventFilter(this);
+		pcLabel->installEventFilter(this);
+
 		// Trace output (scrollable, monospace, grows vertically)
 		traceOutput = new QPlainTextEdit();
 		traceOutput->setReadOnly(true);
@@ -442,6 +451,66 @@ class MainWindow : public QMainWindow
 		dlg.setDefaultButton(QMessageBox::No);
 		if (dlg.exec() == QMessageBox::Yes)
 			closed = true;
+	}
+
+	void EditRegister(const QString &name, uint16_t currentValue,
+		std::function<void(uint16_t)> setter) {
+		if (emulator->Running()) return;
+		QDialog dlg(this);
+		dlg.setWindowTitle("Edit " + name);
+		auto *form = new QFormLayout(&dlg);
+
+		auto *edit = new QLineEdit(QString::asprintf("%04X", currentValue));
+		edit->setFont(uiFont);
+		form->addRow(name + ":", edit);
+
+		auto *buttons = new QDialogButtonBox(
+			QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+		connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+		connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+		form->addRow(buttons);
+
+		edit->selectAll();
+		edit->setFocus();
+
+		if (dlg.exec() == QDialog::Accepted) {
+			bool ok;
+			uint16_t val = edit->text().toUShort(&ok, 16);
+			if (ok) {
+				setter(val);
+				UpdateUI();
+			}
+		}
+	}
+
+	bool eventFilter(QObject *obj, QEvent *event) override {
+		if (event->type() == QEvent::MouseButtonPress) {
+			auto *me = static_cast<QMouseEvent*>(event);
+			if (me->button() == Qt::LeftButton) {
+				if (obj == bcLabel) {
+					EditRegister("BC", emulator->BC(),
+						[this](uint16_t v){ emulator->BC(v); });
+					return true;
+				} else if (obj == deLabel) {
+					EditRegister("DE", emulator->DE(),
+						[this](uint16_t v){ emulator->DE(v); });
+					return true;
+				} else if (obj == hlLabel) {
+					EditRegister("HL", emulator->HL(),
+						[this](uint16_t v){ emulator->HL(v); });
+					return true;
+				} else if (obj == spLabel) {
+					EditRegister("SP", emulator->SP(),
+						[this](uint16_t v){ emulator->SP(v); });
+					return true;
+				} else if (obj == pcLabel) {
+					EditRegister("PC", emulator->PC(),
+						[this](uint16_t v){ emulator->PC(v); });
+					return true;
+				}
+			}
+		}
+		return QMainWindow::eventFilter(obj, event);
 	}
 
 	void keyPressEvent(QKeyEvent *event) override {

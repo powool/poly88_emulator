@@ -19,10 +19,15 @@ class EmulatorInterface {
 	virtual uint8_t M() const = 0;
 	virtual std::string PSW() const = 0;
 	virtual uint16_t BC() const = 0;
+	virtual uint16_t BC(uint16_t bc) = 0;
 	virtual uint16_t DE() const = 0;
+	virtual uint16_t DE(uint16_t de) = 0;
 	virtual uint16_t HL() const = 0;
+	virtual uint16_t HL(uint16_t hl) = 0;
 	virtual uint16_t SP() const = 0;
+	virtual uint16_t SP(uint16_t sp) = 0;
 	virtual uint16_t PC() const = 0;
+	virtual uint16_t PC(uint16_t pc) = 0;
 	virtual std::string Disassemble(uint16_t pc) = 0;
 	virtual void KeyPress(uint8_t ch) = 0;
 	virtual bool Running() const = 0;
