@@ -92,7 +92,7 @@ Memory::Memory()
 
 Memory::~Memory()
 {
-    std::cerr << "shutting down memory." << std::endl;
+//    std::cerr << "shutting down memory." << std::endl;
 }
 
 // this method needs to check address range against ROM settings

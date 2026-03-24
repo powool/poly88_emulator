@@ -484,7 +484,7 @@ void UsartControl::Write(uint8_t data)
 				if (readFiles.empty()) {
 					filename = fileDialogBridge->RequestFile("Open Tape File for Read");
 					if (filename.empty()) {
-						std::cerr << "Tape read cancelled by user." << std::endl;
+//						std::cerr << "Tape read cancelled by user." << std::endl;
 						return;
 					}
 				} else {
