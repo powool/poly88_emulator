@@ -10,6 +10,38 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+/*
+ * loop until we die
+ * 1 if we don't have bit sync, move ahead one quarter wave and re-sync
+ * 2 if we don't have byte sync, move ahead one bit
+ * 3 if we don't have an e6, go back to 1
+ * 4 print
+ *
+ *
+ *
+ */
+
+template<typename T>
+std::ostream &operator << (std::ostream &stream, const std::vector<T> &vec)
+{
+	for(auto i = 0; i < vec.size(); i++)
+		stream << std::dec << i << ": " << vec[i] << std::endl;
+}
+
+// Thrown when we don't get a clean 0/1 bit.
+// Tweak timebase by some fraction of a wave.
+class BitSyncError : public std::domain_error {
+public:
+	BitSyncError(const char *s) : std::domain_error(s) {;}
+};
+
+// Thrown when we don't get a 1 for a start bit.
+// Resync timebase to the next full bit (3.33ms)
+class ByteSyncError : public std::domain_error {
+public:
+	ByteSyncError(const char *s) : std::domain_error(s) {;}
+};
+
 //
 // Read WAV file waveforms, converting samples
 // to zero crossings, direction, and time base.
@@ -78,6 +110,12 @@ protected:
 		else
 			return 0xff - m_wav[index];
 	}
+	uint64_t AudacityIndex(double t) {
+		return Time2Index(t) - 0x2c;
+	}
+	uint64_t AudacityIndex(uint64_t t) {
+		return t - 0x2c;
+	}
 };
 
 //
@@ -89,51 +127,112 @@ protected:
 public:
 	TapeBitReader(const char * fileName) : TapeWaveReader(fileName) {;}
 
+	// Given a time index in seconds, determine if either a 0 or 1
+	// bit appears to be encoded there
+	//
+	// 1200HZ => 0 bit
+	// 2400HZ => 1 bit
+	// 8 zero crossings => 0 bit
+	// 16 zero crossings => 1 bit
 	bool Bit(double t) {
+
+//		std::cerr << AudacityIndex(t) << ": Start decode of bit.\n";
+
+		// We could just count them, but for the moment,
+		// track the time the zero crossings occur, as well
+		// (not used at the present time).
 		std::vector<double> zeroCrossings;
-		// this is the timer interval in which a single bit is encoded
+		std::vector<uint64_t> zeroCrossingIndex;
+
+		// define the end of interval in which a single bit is encoded
 		double intervalEnd = t + bitTime;
 
+		// now count zero crossings inside the time interval
+		// [t,intervalEnd]
 		while(t < intervalEnd) {
 			auto nextCrossing = TimeOfNextZeroCrossing(t);
 			zeroCrossings.push_back(nextCrossing);
+			zeroCrossingIndex.push_back(AudacityIndex(nextCrossing));	// debug
 			t = nextCrossing + QuarterWaveTime(2400);
 //			t += QuarterWaveTime(2400);	// the high freq is 2400HZ, just bump halfway into the shortest wave
 		}
 
+		// These checks are heuristic - we have a couple of challenges, a)
+		// actually find the bit, b) do it in such a way that we can re-sync
+		// on the waveforms.
+
 		// in 3.333ms, if we see exactly 8 crossings, that is 1200HZ, so allow some slop
-		if(zeroCrossings.size() >= 6 && zeroCrossings.size() <= 10)
+		if(zeroCrossings.size() >= 5 && zeroCrossings.size() <= 10)
 			return false;
 
 		// in 3.333ms, if we see exactly 16 crossings, that is 2400HZ, so allow some slop
-		if(zeroCrossings.size() >= 14 && zeroCrossings.size() <= 18)
+		if(zeroCrossings.size() >= 11 && zeroCrossings.size() <= 20)
 			return true;
 
-		throw(std::domain_error("lost sync"));
+		// This should be unusual. From what I've seen, we certainly would expect
+		// quite a few at the beginning of the audio track (i.e. before the
+		// casette interface even turns on). However, during the normal part of
+		// audio file, I see very few cases where this should actually happen.
+		#if 0
+		// get noisy if we're well into the data part of the track
+		if(t > 30) {
+			std::cerr << zeroCrossingIndex;
+			std::cerr << AudacityIndex(t) << ": unexpected loss of bit sync. Fix.\n";
+		}
+		#endif
+		throw BitSyncError("lost bit sync - adjust timebase forward by half or quarter wave.");
 	}
 
-	// t should be near, but won't be exactly at the start of a bit
+	// It should be near, but won't be exactly at the start of a bit
 	// that changed from high to low, so previous zero crossings
 	// should be fast, next ones slow, pick the zero crossing that
 	// bisects the two.
-	double ResyncAtBitChange(double t) {
+	double ResyncAtBitChange(double t, bool bit = true) {
 
 		// pick a spot a few fast cycles back (at 2400HZ, we have 8 to choose from, pick 3)
-		t -= 3 * FullWaveTime(2400);
+		t -= 3 * FullWaveTime(bit ? 2400 : 1200);
 
 		// find a zero crossing after that
 		auto firstCrossing = TimeOfNextZeroCrossing(t);
 		while(true) {
 			auto nextCrossing = TimeOfNextZeroCrossing(firstCrossing + QuarterWaveTime(2400));
+			auto period = nextCrossing - firstCrossing;	// this is the period of a half wave
 
 			// We shouldn't have to worry too much about getting the exact wave,
 			// as we have a little bit of leeway.
-			if(nextCrossing - firstCrossing > HalfWaveTime(2400) * 1.5)
-				return firstCrossing;
+			if(bit) {
+				if(period >= HalfWaveTime(1800))
+					return firstCrossing;
+			} else {
+				if(period < HalfWaveTime(1800))
+					return firstCrossing;
+			}
 
 			firstCrossing = nextCrossing;
 		}
 		// The above loop throws when we run out of data.
+	}
+
+	//
+	double SyncClockToBitChange(double t) {
+		while(true) {
+			try {
+				auto bit1 = Bit(t);
+				auto bit2 = Bit(t + bitTime);
+
+				if(bit1 && !bit2) {
+					t = ResyncAtBitChange(t + bitTime, true);
+					return t;
+				}
+				if(!bit1 && bit2) {
+					t = ResyncAtBitChange(t + bitTime, false);
+					return t;
+				}
+			} catch(BitSyncError e) {
+				// Ignore bit sync error here
+			}
+			t += HalfWaveTime(2400);
+		}
 	}
 };
 
@@ -145,7 +244,7 @@ public:
 		auto startBit = Bit(t);
 
 		if(!startBit)
-			throw(std::domain_error("failed to find start bit"));
+			throw ByteSyncError("failed to find start bit - adjust timebase forward 1 bit");
 
 //		std::cerr << "yaaay! got a start bit!!\n";
 
@@ -155,11 +254,15 @@ public:
 		bool previousBit = true;	// previous bit was the start bit
 		for(auto bit = 0; bit < 8; bit++) {
 			auto thisBit = Bit(t);
-			if(thisBit)
+			if(thisBit) {
 				byte |= 1 << bit;
+				previousBit = thisBit;
+			}
 
 			if(previousBit && !thisBit) {
-				t = ResyncAtBitChange(t);
+				auto tNew = ResyncAtBitChange(t);
+				std::cerr << AudacityIndex(t) << ": Resync to: " << AudacityIndex(tNew) << " - was that an improvement?\n";
+				t = tNew;
 				previousBit = thisBit;
 			}
 
@@ -177,22 +280,41 @@ public:
 	// end of sound data.
 	std::pair<uint8_t, double> ReadByteAndSync(double t) {
 		uint64_t syncCount = 0;
+		if(!m_sync) {
+			auto tNew = SyncClockToBitChange(t);
+			std::cerr << AudacityIndex(t) << ": Resync to: " << AudacityIndex(tNew) << " - was that an improvement?\n";
+			t = tNew;
+		}
 		while(true) {
 			try {
 				auto result = Byte(t);
-				if(!m_sync && result.first != 0xe6)
-					throw std::domain_error("not in sync yet");
-				// Now we're synced, so return the 0xe6 sync byte,
-				// and all data that is synced afterwards.
-				m_sync = true;
-				return result;
-			} catch (std::domain_error e) {
-				std::cerr << std::dec << syncCount << ": lost sync at time " << t << " (" << e.what() << "), moving ahead one bitTime.\n";
+				if(result.first == 0xe6 || m_sync) {
+					m_sync = true;
+					return result;
+				}
+
+				// We got a full byte, with no exceptions, but we aren't
+				// in sync, so we need to move forward a single bit until
+				// we can decode our sync 0xe6 bytes.
+			} catch (BitSyncError e) {
+				if(t>30)
+					std::cerr << std::dec << syncCount << ": lost bit sync at time " << t << " (" << e.what() << "), moving ahead one bitTime.\n";
+
+				if(m_sync && t>10) abort();
+
+				m_sync = false;
+
+				syncCount++;
+			} catch (ByteSyncError e) {
+				if(t>30)
+					std::cerr << std::dec << syncCount << ": lost byte sync at time " << t << " (" << e.what() << "), moving ahead one bitTime.\n";
+				// We failed to see a 1 start bit, so move ahead one bit.
 				m_sync = false;
 				syncCount++;
-				t += HalfWaveTime(2400); 
-				t = TimeOfNextZeroCrossing(t);
 			}
+
+			t += bitTime - QuarterWaveTime(2400);
+			t = TimeOfNextZeroCrossing(t);
 		}
 	}
 };
