@@ -184,7 +184,7 @@ static const char *darkStyleSheet = R"(
 		border-radius: 4px;
 		padding: 3px 6px;
 	}
-	QLabel#regLabel:hover {
+	QLabel#regLabel[editable="true"]:hover {
 		border-color: #89b4fa;
 		background-color: #1e1e2e;
 	}
@@ -279,6 +279,59 @@ static const char *darkStyleSheet = R"(
 )";
 
 // ---------------------------------------------------------------------------
+// RegisterGrid — grouped register display with editable-state control
+// ---------------------------------------------------------------------------
+class RegisterGrid : public QGroupBox {
+	QGridLayout *grid;
+	QFont font;
+	int nextRow = 1;  // row 0 is reserved for short registers (A, M, PSW)
+	std::vector<QLabel*> editableLabels;
+
+    public:
+	RegisterGrid(const QString &title, const QFont &f, QWidget *parent = nullptr)
+		: QGroupBox(title, parent), font(f)
+	{
+		grid = new QGridLayout;
+		grid->setSpacing(4);
+		grid->setContentsMargins(8, 8, 8, 8);
+		setLayout(grid);
+	}
+
+	QGridLayout *Grid() { return grid; }
+
+	void AddRegRow(const QString &name, QLabel *&label) {
+		int row = nextRow++;
+		auto *nameLabel = new QLabel(name);
+		nameLabel->setObjectName("regNameLabel");
+		label = new QLabel();
+		label->setObjectName("regLabel");
+		label->setFont(font);
+		label->setProperty("regName", name);
+		label->setCursor(Qt::PointingHandCursor);
+		label->setToolTip("Click to edit " + name);
+		grid->addWidget(nameLabel, row, 0);
+		grid->addWidget(label, row, 1, 1, 7);
+		editableLabels.push_back(label);
+	}
+
+	void SetEditable(bool editable) {
+		for (auto *label : editableLabels) {
+			if (editable) {
+				label->setCursor(Qt::PointingHandCursor);
+				QString name = label->property("regName").toString();
+				label->setToolTip("Click to edit " + name);
+			} else {
+				label->setCursor(Qt::ArrowCursor);
+				label->setToolTip(QString());
+			}
+			label->setProperty("editable", editable);
+			label->style()->unpolish(label);
+			label->style()->polish(label);
+		}
+	}
+};
+
+// ---------------------------------------------------------------------------
 // MainWindow
 // ---------------------------------------------------------------------------
 class MainWindow : public QMainWindow
@@ -317,6 +370,9 @@ class MainWindow : public QMainWindow
 	QLabel *interruptLabel = nullptr;
 	QLabel *haltedLabel    = nullptr;
 	QLabel *statusRunLabel = nullptr;
+
+	// Register grid
+	RegisterGrid *regGrid = nullptr;
 
 	// Trace output
 	QPlainTextEdit *traceOutput = nullptr;
@@ -490,10 +546,7 @@ class MainWindow : public QMainWindow
 		mainLayout->addWidget(polyVdi, 0, Qt::AlignHCenter);
 
 		// -- Registers panel --
-		auto *regGroup = new QGroupBox("Registers");
-		auto *regGrid = new QGridLayout;
-		regGrid->setSpacing(4);
-		regGrid->setContentsMargins(8, 8, 8, 8);
+		regGrid = new RegisterGrid("Registers", uiFont);
 
 		// Row 0: A, M, PSW (short values)
 		auto *aNameLabel = new QLabel("A");
@@ -501,46 +554,33 @@ class MainWindow : public QMainWindow
 		aLabel = new QLabel();
 		aLabel->setObjectName("regLabel");
 		aLabel->setFont(uiFont);
-		regGrid->addWidget(aNameLabel, 0, 0);
-		regGrid->addWidget(aLabel, 0, 1);
+		regGrid->Grid()->addWidget(aNameLabel, 0, 0);
+		regGrid->Grid()->addWidget(aLabel, 0, 1);
 
 		auto *mNameLabel = new QLabel("M");
 		mNameLabel->setObjectName("regNameLabel");
 		mLabel = new QLabel();
 		mLabel->setObjectName("regLabel");
 		mLabel->setFont(uiFont);
-		regGrid->addWidget(mNameLabel, 0, 2);
-		regGrid->addWidget(mLabel, 0, 3);
+		regGrid->Grid()->addWidget(mNameLabel, 0, 2);
+		regGrid->Grid()->addWidget(mLabel, 0, 3);
 
 		auto *pswNameLabel = new QLabel("PSW");
 		pswNameLabel->setObjectName("regNameLabel");
 		pswLabel = new QLabel();
 		pswLabel->setObjectName("regLabel");
 		pswLabel->setFont(uiFont);
-		regGrid->addWidget(pswNameLabel, 0, 4);
-		regGrid->addWidget(pswLabel, 0, 5, 1, 3);
+		regGrid->Grid()->addWidget(pswNameLabel, 0, 4);
+		regGrid->Grid()->addWidget(pswLabel, 0, 5, 1, 3);
 
-		// Rows 1-5: register pairs with memory dump (full width)
-		auto addRegRow = [&](int row, const QString &name, QLabel *&label) {
-			auto *nameLabel = new QLabel(name);
-			nameLabel->setObjectName("regNameLabel");
-			label = new QLabel();
-			label->setObjectName("regLabel");
-			label->setFont(uiFont);
-			label->setCursor(Qt::PointingHandCursor);
-			label->setToolTip("Click to edit " + name);
-			regGrid->addWidget(nameLabel, row, 0);
-			regGrid->addWidget(label, row, 1, 1, 7);
-		};
+		// Rows 1-5: register pairs with memory dump
+		regGrid->AddRegRow("BC", bcLabel);
+		regGrid->AddRegRow("DE", deLabel);
+		regGrid->AddRegRow("HL", hlLabel);
+		regGrid->AddRegRow("SP", spLabel);
+		regGrid->AddRegRow("PC", pcLabel);
 
-		addRegRow(1, "BC", bcLabel);
-		addRegRow(2, "DE", deLabel);
-		addRegRow(3, "HL", hlLabel);
-		addRegRow(4, "SP", spLabel);
-		addRegRow(5, "PC", pcLabel);
-
-		regGroup->setLayout(regGrid);
-		regGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+		regGrid->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
 		// Make register labels clickable for editing
 		bcLabel->installEventFilter(this);
@@ -566,7 +606,7 @@ class MainWindow : public QMainWindow
 		// -- Registers + Trace side by side --
 		auto *regTraceRow = new QHBoxLayout;
 		regTraceRow->setSpacing(8);
-		regTraceRow->addWidget(regGroup, 0);
+		regTraceRow->addWidget(regGrid, 0);
 		regTraceRow->addWidget(traceGroup, 1);
 		mainLayout->addLayout(regTraceRow, 1);
 
@@ -644,6 +684,9 @@ class MainWindow : public QMainWindow
 		runStopButton->style()->polish(runStopButton);
 		singleStepButton->setEnabled(!running);
 		resetButton->setEnabled(!running);
+
+		// Enable/disable register editing affordances
+		regGrid->SetEditable(!running);
 #if 0
 		// Status bar
 		if (running) {
