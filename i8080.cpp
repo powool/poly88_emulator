@@ -1004,6 +1004,7 @@ bool I8080::Interrupt(int i)
 	if(!InterruptEnable())
 		return false;
 
+	Halt(false);
 	PUSH(PC());
 	PC((uint16_t) i*8);
 	InterruptEnable(false);

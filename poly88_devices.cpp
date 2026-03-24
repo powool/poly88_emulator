@@ -67,6 +67,9 @@ void KeyBoard::Write(uint8_t data)
 
 bool KeyBoard::Poll()
 {
+	if(keys.size()) {
+		SetInterruptPending(true);
+	}
 	return false;
 }
 

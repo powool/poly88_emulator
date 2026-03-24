@@ -14,7 +14,7 @@ class PolyMorphics88 : public EmulatorInterface {
 	std::atomic<bool> running = false;
 	void ExecutionThread() {
 		while(!requestThreadExit) {
-			if (running && !poly88.Halt()) {
+			if (running) {
 				// let poly88 do any rate limiting on speed
 				poly88.Run(machineCycle, true);
 			} else {
