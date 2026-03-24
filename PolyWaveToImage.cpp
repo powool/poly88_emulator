@@ -21,7 +21,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
+#include <QCloseEvent>
 #include <QScrollBar>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTextBrowser>
@@ -255,6 +257,8 @@ class Tape {
 // ---------------------------------------------------------------------------
 struct MainWindowSettings {
 	bool booleanPlaceholder = false;
+	bool invertSignal = false;
+	uint32_t bitrate = 2400;
 };
 
 // ---------------------------------------------------------------------------
@@ -273,6 +277,15 @@ public:
 		booleanCheckBox_->setChecked(settings_.booleanPlaceholder);
 		layout->addRow("Boolean", booleanCheckBox_);
 
+		invertSignalCheckBox_ = new QCheckBox(this);
+		invertSignalCheckBox_->setChecked(settings_.invertSignal);
+		layout->addRow("Invert Signal", invertSignalCheckBox_);
+
+		bitrateSpin_ = new QSpinBox(this);
+		bitrateSpin_->setRange(300, 100000);
+		bitrateSpin_->setValue(static_cast<int>(settings_.bitrate));
+		layout->addRow("Bitrate", bitrateSpin_);
+
 		auto *buttons = new QDialogButtonBox(
 			QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 		layout->addRow(buttons);
@@ -283,12 +296,16 @@ public:
 
 	void accept() override {
 		settings_.booleanPlaceholder = booleanCheckBox_->isChecked();
+		settings_.invertSignal = invertSignalCheckBox_->isChecked();
+		settings_.bitrate = static_cast<uint32_t>(bitrateSpin_->value());
 		QDialog::accept();
 	}
 
 private:
 	MainWindowSettings &settings_;
 	QCheckBox *booleanCheckBox_;
+	QCheckBox *invertSignalCheckBox_;
+	QSpinBox *bitrateSpin_;
 };
 
 // ---------------------------------------------------------------------------
@@ -378,24 +395,37 @@ protected:
 		p.setPen(QColor(60, 60, 60));
 		p.drawLine(0, midY, w, midY);
 
-		// Draw waveform
-		p.setPen(QColor(0, 200, 0));
+		// Draw waveform - linear interpolation between actual sample values
+		p.setRenderHint(QPainter::Antialiasing, true);
+		p.setPen(QPen(QColor(0, 200, 0), 1));
 
-		int prevScreenY = midY;
+		auto sampleToY = [&](double val) -> int {
+			int y = midY - static_cast<int>(val * yScale_ * midY / 32768.0);
+			return std::clamp(y, 0, h - 1);
+		};
+
+		int count = audio_->SampleCount();
+		bool first = true;
+		int prevPx = 0, prevY = midY;
+
 		for (int px = 0; px < w; px++) {
 			double sampleIdx = pixelToSample(px);
 			int idx = static_cast<int>(sampleIdx);
-			if (idx < 0 || idx >= audio_->SampleCount()) continue;
+			if (idx < 0 || idx >= count - 1) continue;
 
-			double val = audio_->Value(idx);
-			int screenY = midY - static_cast<int>(val * yScale_ * midY / 32768.0);
-			screenY = std::clamp(screenY, 0, h - 1);
+			// Linear interpolation between adjacent samples
+			double frac = sampleIdx - idx;
+			double val = audio_->Value(idx) * (1.0 - frac) + audio_->Value(idx + 1) * frac;
+			int screenY = sampleToY(val);
 
-			if (px > 0) {
-				p.drawLine(px - 1, prevScreenY, px, screenY);
+			if (!first) {
+				p.drawLine(prevPx, prevY, px, screenY);
 			}
-			prevScreenY = screenY;
+			prevPx = px;
+			prevY = screenY;
+			first = false;
 		}
+		p.setRenderHint(QPainter::Antialiasing, false);
 
 		// Draw TapeByte tick marks on the X axis
 		drawByteTickMarks(p, w, h);
@@ -536,6 +566,8 @@ private:
 	// UI components
 	WaveformView *waveformView_ = nullptr;
 	QScrollBar *hScrollBar_ = nullptr;
+	QLabel *indexLabel_ = nullptr;
+	QLabel *widthLabel_ = nullptr;
 	QLabel *tapeFileLabel_ = nullptr;
 	QLabel *recordNumberLabel_ = nullptr;
 	QLabel *byteLabel_ = nullptr;
@@ -549,19 +581,23 @@ private:
 		QMenu *fileMenu = menuBar()->addMenu("&File");
 
 		QAction *loadAction = fileMenu->addAction("&Load");
+		loadAction->setShortcut(QKeySequence("Ctrl+L"));
 		connect(loadAction, &QAction::triggered, this, &MainWindow::onLoad);
 
 		QAction *saveAction = fileMenu->addAction("&Save");
+		saveAction->setShortcut(QKeySequence("Ctrl+S"));
 		connect(saveAction, &QAction::triggered, this, &MainWindow::onSave);
 
 		fileMenu->addSeparator();
 
-		QAction *settingsAction = fileMenu->addAction("Se&ttings");
+		QAction *settingsAction = fileMenu->addAction("Edit Se&ttings");
+		settingsAction->setShortcut(QKeySequence("Ctrl+E"));
 		connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettings);
 
 		fileMenu->addSeparator();
 
-		QAction *quitAction = fileMenu->addAction("&Quit");
+		QAction *quitAction = fileMenu->addAction("E&xit");
+		quitAction->setShortcut(QKeySequence("Ctrl+Q"));
 		connect(quitAction, &QAction::triggered, this, &MainWindow::onQuit);
 
 		// --- Help menu ---
@@ -598,6 +634,12 @@ private:
 		topLayout->addWidget(waveformView_, 1);
 
 		hScrollBar_ = new QScrollBar(Qt::Horizontal, topWidget);
+		hScrollBar_->setStyleSheet(
+			"QScrollBar:horizontal { background: #2a2a2a; height: 16px; }"
+			"QScrollBar::handle:horizontal { background: #888888; min-width: 20px; border-radius: 3px; }"
+			"QScrollBar::handle:horizontal:hover { background: #aaaaaa; }"
+			"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }"
+		);
 		topLayout->addWidget(hScrollBar_);
 
 		connect(waveformView_, &WaveformView::scrollChanged,
@@ -622,6 +664,8 @@ private:
 			return valueLabel;
 		};
 
+		indexLabel_ = makeStatusPair("Index");
+		widthLabel_ = makeStatusPair("Width");
 		tapeFileLabel_ = makeStatusPair("Tape File");
 		recordNumberLabel_ = makeStatusPair("Record Number");
 		byteLabel_ = makeStatusPair("Byte");
@@ -688,6 +732,10 @@ private:
 			hScrollBar_->setValue(pos);
 		}
 		updatingScrollBar_ = false;
+
+		// Update Index and Width labels
+		indexLabel_->setText(QString::number(static_cast<qint64>(offset)));
+		widthLabel_->setText(QString::number(static_cast<qint64>(visible)));
 	}
 
 private slots:
@@ -777,8 +825,11 @@ private slots:
 	}
 
 	void onSave() {
-		// placeholder - will be implemented later
-		statusBar()->showMessage("Save not yet implemented");
+		Save();
+	}
+
+	void Save() {
+		QMessageBox::information(this, "Save", "Save is not yet implemented.");
 	}
 
 	void onSettings() {
@@ -816,6 +867,18 @@ private slots:
 	void onAbout() {
 		QMessageBox::about(this, "About PolyWaveToImage",
 			"Written by Powool");
+	}
+
+protected:
+	void closeEvent(QCloseEvent *event) override {
+		auto reply = QMessageBox::question(
+			this, "Quit", "Are you sure you want to quit?",
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+		if (reply == QMessageBox::Yes) {
+			event->accept();
+		} else {
+			event->ignore();
+		}
 	}
 };
 
