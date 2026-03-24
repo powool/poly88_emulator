@@ -31,8 +31,6 @@ I8080::I8080()
 		}
 		PSWTable[i].parity = (~ringsum) & 0x01;
 	}
-
-	regPC_breakpoint = 0x0;
 }
 
 I8080::~I8080()
@@ -263,10 +261,6 @@ int I8080::ExecuteCycle(Devices *dev)
 
 	if(singleStepCounter > 0 && --singleStepCounter == 0) Interrupt(7);
 	RunTraces();
-	if(regPC_breakpoint && regPC_breakpoint==PC())
-	{
-		std::cerr << "got to breakpoint at pc=0x" << util::hex(4) << PC() << std::endl;
-	}
 
 	// decode instruction and execute it
 	switch(memory.get_byte(PC()))

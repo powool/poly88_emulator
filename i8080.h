@@ -35,7 +35,6 @@ private:
 
 	uint16_t regSP;
 	uint16_t regPC;
-	uint16_t regPC_breakpoint;
 
 	uint8_t  regA;
 
