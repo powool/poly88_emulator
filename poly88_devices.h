@@ -60,6 +60,9 @@ class UsartInputFile : public IUsartFile
 public:
 	UsartInputFile(std::string filename) : m_input(filename, std::ios_base::binary)
 	{
+		if (m_input.fail()) {
+			throw std::invalid_argument(std::string("can't open file: " + filename));
+		}
 		m_usartState = INPUT;
 		m_filename = filename;
 		std::cerr << "Open input file: " << m_filename << std::endl;
@@ -111,6 +114,8 @@ protected:
 // Usart control
 class UsartControl : public Device
 {
+	std::queue<std::string> readFiles;
+	std::queue<std::string> writeFiles;
 public:
 	UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart);
 	void StartUp() override;
@@ -119,6 +124,7 @@ public:
 	void Write(uint8_t data) override;
 	void SetUsartFile(std::shared_ptr<IUsartFile> usartFile) { m_usart->m_usartFile = usartFile; }
 	void Poll();
+	bool RunEmulatorCommand(const std::vector<std::string> &args);
 private:
 	std::shared_ptr<Usart> m_usart;
 	bool m_tapeRunning;

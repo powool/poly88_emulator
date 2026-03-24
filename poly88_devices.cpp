@@ -439,45 +439,93 @@ std::shared_ptr<IUsartFile> OpenTapeFile(std::string filename)
 	return std::make_shared<UsartInputFile>(filename);
 }
 
+bool UsartControl::RunEmulatorCommand(const std::vector<std::string> &args)
+{
+	if (args.size() == 1 && args[0] == "tape") {
+		// dump queued up read and write files
+		std::cout << "tape read queue has " << readFiles.size() << " files." << std::endl;
+		std::cout << "tape write queue has " << writeFiles.size() << " files." << std::endl;
+		return false;
+	}
+	if (args.size() == 2 && args[0] == "tape" && args[1] == "clear") {
+		readFiles = {};
+		writeFiles = {};
+		return false;
+	}
+	if (args.size() == 3 && args[0] == "tape" && args[1] == "read") {
+		readFiles.push(args[2]);
+		return false;
+	}
+	if (args.size() == 3 && args[0] == "tape" && args[1] == "write") {
+		writeFiles.push(args[2]);
+		return false;
+	}
+
+	if (args[0] == "tape") {
+		std::cerr << "unknown command." << std::endl;
+		return false;
+	}
+
+	return false;
+}
+
 void UsartControl::Write(uint8_t data)
 {
 	if(m_debug)
 		std::cerr << "Usart control write: " << util::hex(2) << (uint16_t) data << std::endl;
-	if(data == 0x96) {
-		if(!m_usart->m_usartFile) {
-			std::string filename;
-			std::cout << "starting the mag tape for read!" << std::endl;
-			std::cout << "enter a filename here!!!!" << std::endl;
-			std::cin >> filename;
-			SetUsartFile(std::make_shared<UsartInputFile>(filename));
-			// polling rate limits.
-			// here we want interrupts, because input is interrupt driven
-			m_usart->SetInterruptPending(true);
-			m_tapeRunning = true;
-		}
-	} else if(data == 0x26 || data == 0x21) {
-		if(!m_usart->m_usartFile) {
-			std::string filename;
-			std::cout << "starting the mag tape for write!" << std::endl;
-			std::cout << "enter a filename here!!!!" << std::endl;
-			std::cin >> filename;
-			SetUsartFile(std::make_shared<UsartOutputFile>(filename));
-			m_usart->SetInterruptPending(true);
-			m_tapeRunning = true;
-		}
-	} else if(data == 0x00) {
-		if(m_usart->m_usartFile) {
-			if(m_usart->m_usartFile->GetState() == IUsartFile::INPUT) {
-				std::cout << "stop the mag tape!" << std::endl;
-				SetUsartFile(nullptr);
-				m_usart->SetInterruptPending(false);
-			}
+	try {
+		if(data == 0x96) {
+			if(!m_usart->m_usartFile) {
+				std::string filename;
 
-			// This lets Usart::Poll close the output tape file
-			// because basic is shutting off the tape device every record.
-			m_tapeRunning = false;
-			m_tapeTimeout = time(nullptr);
+				if (readFiles.empty()) {
+					std::cout << "starting the mag tape for read!" << std::endl;
+					std::cout << "enter a filename here!!!!" << std::endl;
+					std::cin >> filename;
+				} else {
+					filename = readFiles.front();
+					readFiles.pop();
+					std::cout << "opening pre-queued tape file for read: " << filename << std::endl;
+				}
+				SetUsartFile(std::make_shared<UsartInputFile>(filename));
+				// polling rate limits.
+				// here we want interrupts, because input is interrupt driven
+				m_usart->SetInterruptPending(true);
+				m_tapeRunning = true;
+			}
+		} else if(data == 0x26 || data == 0x21) {
+			if(!m_usart->m_usartFile) {
+				std::string filename;
+				if (readFiles.empty()) {
+					std::cout << "starting the mag tape for write!" << std::endl;
+					std::cout << "enter a filename here!!!!" << std::endl;
+					std::cin >> filename;
+				} else {
+					filename = writeFiles.front();
+					writeFiles.pop();
+					std::cout << "opening pre-queued tape file for write: " << filename << std::endl;
+				}
+				SetUsartFile(std::make_shared<UsartOutputFile>(filename));
+				m_usart->SetInterruptPending(true);
+				m_tapeRunning = true;
+			}
+		} else if(data == 0x00) {
+			if(m_usart->m_usartFile) {
+				if(m_usart->m_usartFile->GetState() == IUsartFile::INPUT) {
+					std::cout << "stop the mag tape!" << std::endl;
+					SetUsartFile(nullptr);
+					m_usart->SetInterruptPending(false);
+				}
+
+				// This lets Usart::Poll close the output tape file
+				// because basic is shutting off the tape device every record.
+				m_tapeRunning = false;
+				m_tapeTimeout = time(nullptr);
+			}
 		}
+	}
+	catch (std::exception &e) {
+		std::cerr << "Tape operation failed: " << e.what() << std::endl;
 	}
 }
 
