@@ -135,7 +135,7 @@ class MainWindow : public QMainWindow
 			QMessageBox dlg(this);
 			dlg.setWindowTitle("About");
 			dlg.setTextFormat(Qt::MarkdownText);
-			dlg.setText("Written by Paul Anderson");
+			dlg.setText("Written by Powool");
 			dlg.setStandardButtons(QMessageBox::Close);
 			dlg.exec();
 		});
