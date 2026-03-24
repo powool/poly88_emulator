@@ -93,3 +93,5 @@ public:
 
 	void Dump(std::ostream &stream, int index, int count = 0);
 };
+
+using AudioPtr = std::shared_ptr<Audio>;
