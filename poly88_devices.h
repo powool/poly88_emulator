@@ -10,8 +10,6 @@
 
 extern void MyIntSleep(int);
 
-extern void Command(const char *msg = NULL);
-
 class KeyBoard : public Device
 {
 	std::queue<uint8_t>	keys;
