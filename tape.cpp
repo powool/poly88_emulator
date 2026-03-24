@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
-#include <tuple>
 #include <vector>
 
 #include <getopt.h>
@@ -15,9 +14,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-class ReadError : std::runtime_error {
+class AudioEOF : std::runtime_error {
 public:
-	ReadError(const char *s) : std::runtime_error(s) {;}
+	AudioEOF(const char *s) : std::runtime_error(s) {;}
 };
 
 class WaveHeader {
@@ -212,7 +211,9 @@ std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
 			break;
 		default:
 			resultBit = 2;
+#if 0
 			std::cout << initialIndex << ", " << audio.TimeOffset(initialIndex) << "s: fullWaveCount = " << fullWaveCount << " lost sync" << std::endl;
+#endif
 			break;
 	}
 
@@ -228,19 +229,18 @@ class Uart {
 	bool debug;
 	const int bitRate = 300;	// bit per second
 	std::pair<int, int> (*bitDecoder)(Audio &, int, int);
-	bool inBitSync;
+	int syncedIndex;
 
 public:
 	Uart(std::pair<int, int> (*bitDecoder)(Audio &, int, int)) {
 		debug = false;
-		inBitSync = false;
 		this->bitDecoder = bitDecoder;
+		syncedIndex = 0;
 	}
 
 	void SetDebug(int debug) { this->debug = debug; }
 
 	std::pair<int, int> BitRead(Audio &audio, int index) {
-//		index = audio.FindNearestZeroCrossing(index, bitRate);
 		return bitDecoder(audio, index, bitRate);
 	}
 
@@ -258,7 +258,7 @@ public:
 			// skip to next sample
 			index++;
 		}
-		throw ReadError("ran out of data");
+		throw AudioEOF("ran out of data");
 	}
 
 	// A byte on tape is encoded as a single start bit (value=0),
@@ -266,10 +266,9 @@ public:
 	// bits (also value 0).
 	// Any time we fall out of sync (e.g. BitRead returns a value
 	// of 2), we need to re-sync appropriately.
-	// The return tuple looks like this:
+	// The return pair looks like this:
 	//   resulting data byte (guaranteed to be valid)
 	//   synchronized index of waveform immediately following last stop bit
-	//   synchronized index of waveform of start bit
 	//
 	// Synchronization is a bit sticky. On the poly-88, the processor
 	// loops, reading a byte - if it sees an 0xe6, it is done, otherwise,
@@ -281,7 +280,7 @@ public:
 	// is a very good approach yet.
 	//
 	// If we run out of data to return, we throw an exception
-	std::pair<int, int> ByteRead(Audio &audio, int index) {
+	std::pair<int, int> ByteReadUnsynced(Audio &audio, int index) {
 		int samplesPerBit = audio.SamplesPerBit(300);
 		uint8_t resultByte = 0;
 
@@ -341,36 +340,65 @@ public:
 
 		return std::make_pair(resultByte, index);
 	}
+
+	void SetSyncedReadIndex(Audio &audio, int index) {
+		syncedIndex = index;
+		syncedIndex = SyncToValidBit(audio, syncedIndex);
+	}
+
+	uint8_t ByteReadSynced(Audio &audio) {
+		std::pair<int, int> byte;
+		while(true) {
+			if (debug) {
+				audio.Dump(std::cout, syncedIndex);
+			}
+			byte = ByteReadUnsynced(audio, syncedIndex);
+			if (byte.first == 256) {
+				syncedIndex += 4;		// skip 4 samples
+				syncedIndex = SyncToValidBit(audio, syncedIndex);
+				continue;
+			}
+			syncedIndex = byte.second;
+			break;
+		}
+		if (debug) std::cout << syncedIndex << ", " << audio.TimeOffset(syncedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte.first) << std::dec << std::endl;
+		return byte.first;
+	}
 };
 
-int main(int argc, const char **argv) {
-	int debug = true;
-	Audio audio("poly_basic_a00_byte_format.wav");
+void usage(int argc, char **argv) {
+}
+
+int main(int argc, char **argv) {
+	int opt;
+	int debug = false;
+	bool phase = false;
+
+	while ((opt = getopt(argc, argv, "dl:pu:")) != -1) {
+		switch(opt) {
+			case 'd':
+				debug = true;
+				break;
+			case 'p':
+				phase = !phase;
+				break;
+			default:
+				usage(argc, argv);
+				exit(1);
+		}
+	}
+
+	Audio audio(argv[optind]);
 	Uart uart(DecodeByteEncodedBit);
 	uart.SetDebug(debug);
+	uart.SetSyncedReadIndex(audio, 0);
 
-	std::tuple<uint8_t, int, int> tuple;
-	auto index = 701408;
-//	index = 701778;
-//	index = 6935244;
-//	index = 711569 - 10;
-	index = 708282;
-
-	int samplesPerBit = audio.SamplesPerBit(300);
-	index = uart.SyncToValidBit(audio, index);
-	while(true) {
-		if (debug) {
-			audio.Dump(std::cout, index);
+	try {
+		while(true) {
+			auto ch = uart.ByteReadSynced(audio);
+			std::cout << ch;
 		}
-//		index = audio.FindNearestZeroCrossing(index, 300);
-		auto byte = uart.ByteRead(audio, index);
-		if (byte.first == 256) {
-			index += 4;		// skip 4 samples
-			index = uart.SyncToValidBit(audio, index);
-			continue;
-		}
-		std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(byte.first) << std::dec << std::endl;
-		// 1 start bit, 8 data bits, 2 stop bits == 11 total:
-		index = byte.second;
+	} catch (AudioEOF &e) {
+		// ignore eof
 	}
 }
