@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include <vector>
-#include "SDL_image.h"      // from the separate package SDL_image
+#include <SDL_image.h>      // from the separate package SDL_image
 
 class Cvdi_font
 {
