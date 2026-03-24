@@ -9,6 +9,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -21,12 +22,13 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
-#include <QCloseEvent>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTextBrowser>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -268,23 +270,23 @@ class SettingsDialog : public QDialog {
 	Q_OBJECT
 public:
 	SettingsDialog(MainWindowSettings &settings, QWidget *parent = nullptr)
-		: QDialog(parent), settings_(settings)
+		: QDialog(parent), settingsRef(settings)
 	{
 		setWindowTitle("Settings");
 		auto *layout = new QFormLayout(this);
 
-		booleanCheckBox_ = new QCheckBox(this);
-		booleanCheckBox_->setChecked(settings_.booleanPlaceholder);
-		layout->addRow("Boolean", booleanCheckBox_);
+		booleanCheckBox = new QCheckBox(this);
+		booleanCheckBox->setChecked(settingsRef.booleanPlaceholder);
+		layout->addRow("Boolean", booleanCheckBox);
 
-		invertSignalCheckBox_ = new QCheckBox(this);
-		invertSignalCheckBox_->setChecked(settings_.invertSignal);
-		layout->addRow("Invert Signal", invertSignalCheckBox_);
+		invertSignalCheckBox = new QCheckBox(this);
+		invertSignalCheckBox->setChecked(settingsRef.invertSignal);
+		layout->addRow("Invert Signal", invertSignalCheckBox);
 
-		bitrateSpin_ = new QSpinBox(this);
-		bitrateSpin_->setRange(300, 100000);
-		bitrateSpin_->setValue(static_cast<int>(settings_.bitrate));
-		layout->addRow("Bitrate", bitrateSpin_);
+		bitrateSpin = new QSpinBox(this);
+		bitrateSpin->setRange(300, 100000);
+		bitrateSpin->setValue(static_cast<int>(settingsRef.bitrate));
+		layout->addRow("Bitrate", bitrateSpin);
 
 		auto *buttons = new QDialogButtonBox(
 			QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -295,17 +297,17 @@ public:
 	}
 
 	void accept() override {
-		settings_.booleanPlaceholder = booleanCheckBox_->isChecked();
-		settings_.invertSignal = invertSignalCheckBox_->isChecked();
-		settings_.bitrate = static_cast<uint32_t>(bitrateSpin_->value());
+		settingsRef.booleanPlaceholder = booleanCheckBox->isChecked();
+		settingsRef.invertSignal = invertSignalCheckBox->isChecked();
+		settingsRef.bitrate = static_cast<uint32_t>(bitrateSpin->value());
 		QDialog::accept();
 	}
 
 private:
-	MainWindowSettings &settings_;
-	QCheckBox *booleanCheckBox_;
-	QCheckBox *invertSignalCheckBox_;
-	QSpinBox *bitrateSpin_;
+	MainWindowSettings &settingsRef;
+	QCheckBox *booleanCheckBox;
+	QCheckBox *invertSignalCheckBox;
+	QSpinBox *bitrateSpin;
 };
 
 // ---------------------------------------------------------------------------
@@ -325,52 +327,52 @@ public:
 			this, &WaveformView::showContextMenu);
 	}
 
-	void setAudio(AudioPtr audio) {
-		audio_ = audio;
-		scrollOffset_ = 0;
+	void setAudio(AudioPtr a) {
+		audio = a;
+		scrollOffset = 0;
 		update();
 		emit scrollChanged();
 	}
 
-	void setTape(Tape *tape) {
-		tape_ = tape;
+	void setTape(Tape *t) {
+		tape = t;
 		update();
 	}
 
-	AudioPtr getAudio() const { return audio_; }
+	AudioPtr getAudio() const { return audio; }
 
 	// Convert a widget-local X pixel to a sample index
 	double pixelToSample(int px) const {
-		return scrollOffset_ + static_cast<double>(px) / xScale_;
+		return scrollOffset + static_cast<double>(px) / xScale;
 	}
 
 	// Convert a sample index to a widget-local X pixel
 	double sampleToPixel(double sampleIdx) const {
-		return (sampleIdx - scrollOffset_) * xScale_;
+		return (sampleIdx - scrollOffset) * xScale;
 	}
 
-	double getScrollOffset() const { return scrollOffset_; }
+	double getScrollOffset() const { return scrollOffset; }
 	void setScrollOffset(double offset) {
-		if (!audio_) return;
-		double maxOff = std::max(0.0, static_cast<double>(audio_->SampleCount()) -
-			width() / xScale_);
-		scrollOffset_ = std::clamp(offset, 0.0, maxOff);
+		if (!audio) return;
+		double maxOff = std::max(0.0, static_cast<double>(audio->SampleCount()) -
+			width() / xScale);
+		scrollOffset = std::clamp(offset, 0.0, maxOff);
 		update();
 		emit scrollChanged();
 	}
 
 	// Number of samples visible in the viewport
 	double visibleSamples() const {
-		return width() / xScale_;
+		return width() / xScale;
 	}
 
 	double totalSamples() const {
-		if (!audio_) return 1.0;
-		return static_cast<double>(audio_->SampleCount());
+		if (!audio) return 1.0;
+		return static_cast<double>(audio->SampleCount());
 	}
 
-	double getXScale() const { return xScale_; }
-	double getYScale() const { return yScale_; }
+	double getXScale() const { return xScale; }
+	double getYScale() const { return yScale; }
 
 signals:
 	void mouseSampleChanged(double sampleIndex);
@@ -381,7 +383,7 @@ protected:
 		QPainter p(this);
 		p.fillRect(rect(), Qt::black);
 
-		if (!audio_ || audio_->SampleCount() == 0) {
+		if (!audio || audio->SampleCount() == 0) {
 			p.setPen(Qt::gray);
 			p.drawText(rect(), Qt::AlignCenter, "No audio loaded");
 			return;
@@ -400,11 +402,11 @@ protected:
 		p.setPen(QPen(QColor(0, 200, 0), 1));
 
 		auto sampleToY = [&](double val) -> int {
-			int y = midY - static_cast<int>(val * yScale_ * midY / 32768.0);
+			int y = midY - static_cast<int>(val * yScale * midY / 32768.0);
 			return std::clamp(y, 0, h - 1);
 		};
 
-		int count = audio_->SampleCount();
+		int count = audio->SampleCount();
 		bool first = true;
 		int prevPx = 0, prevY = midY;
 
@@ -415,7 +417,7 @@ protected:
 
 			// Linear interpolation between adjacent samples
 			double frac = sampleIdx - idx;
-			double val = audio_->Value(idx) * (1.0 - frac) + audio_->Value(idx + 1) * frac;
+			double val = audio->Value(idx) * (1.0 - frac) + audio->Value(idx + 1) * frac;
 			int screenY = sampleToY(val);
 
 			if (!first) {
@@ -432,13 +434,13 @@ protected:
 	}
 
 	void drawByteTickMarks(QPainter &p, int w, int h) {
-		if (!tape_) return;
+		if (!tape) return;
 
 		p.setPen(QColor(100, 100, 255));
 		int tickTop = h - 20;
 		int tickBot = h - 5;
 
-		for (auto &file : tape_->GetFiles()) {
+		for (auto &file : tape->GetFiles()) {
 			for (auto &record : file.GetRecords()) {
 				auto allBytes = record.GetAllBytes();
 				for (auto *tb : allBytes) {
@@ -453,10 +455,10 @@ protected:
 	}
 
 	void mouseMoveEvent(QMouseEvent *event) override {
-		if (dragging_) {
-			double dx = event->position().x() - dragLastX_;
-			setScrollOffset(scrollOffset_ - dx / xScale_);
-			dragLastX_ = event->position().x();
+		if (dragging) {
+			double dx = event->position().x() - dragLastX;
+			setScrollOffset(scrollOffset - dx / xScale);
+			dragLastX = event->position().x();
 		}
 
 		double sampleIdx = pixelToSample(static_cast<int>(event->position().x()));
@@ -467,8 +469,8 @@ protected:
 
 	void mousePressEvent(QMouseEvent *event) override {
 		if (event->button() == Qt::LeftButton) {
-			dragging_ = true;
-			dragLastX_ = event->position().x();
+			dragging = true;
+			dragLastX = event->position().x();
 			setCursor(Qt::ClosedHandCursor);
 		}
 		QWidget::mousePressEvent(event);
@@ -476,7 +478,7 @@ protected:
 
 	void mouseReleaseEvent(QMouseEvent *event) override {
 		if (event->button() == Qt::LeftButton) {
-			dragging_ = false;
+			dragging = false;
 			setCursor(Qt::ArrowCursor);
 		}
 		QWidget::mouseReleaseEvent(event);
@@ -488,7 +490,7 @@ protected:
 
 		if (event->modifiers() & Qt::ControlModifier) {
 			// Vertical scale: linear with mouse wheel
-			yScale_ = std::clamp(yScale_ + steps * 0.1, 0.1, 50.0);
+			yScale = std::clamp(yScale + steps * 0.1, 0.1, 50.0);
 		} else {
 			// Horizontal scale: exponential / proportional
 			// Larger wheel movement -> exponentially larger scale change
@@ -496,12 +498,12 @@ protected:
 			double mouseX = event->position().x();
 			double sampleAtMouse = pixelToSample(static_cast<int>(mouseX));
 
-			xScale_ = std::clamp(xScale_ * factor, 0.0001, 200.0);
+			xScale = std::clamp(xScale * factor, 0.0001, 200.0);
 
 			// Keep the sample under the mouse cursor stationary
-			scrollOffset_ = sampleAtMouse - mouseX / xScale_;
+			scrollOffset = sampleAtMouse - mouseX / xScale;
 			double maxOff = std::max(0.0, totalSamples() - visibleSamples());
-			scrollOffset_ = std::clamp(scrollOffset_, 0.0, maxOff);
+			scrollOffset = std::clamp(scrollOffset, 0.0, maxOff);
 		}
 		update();
 		emit scrollChanged();
@@ -510,35 +512,45 @@ protected:
 
 private slots:
 	void showContextMenu(const QPoint &pos) {
+		TapeIndex idx = pixelToSample(pos.x());
+
 		QMenu contextMenu(this);
 
+		QAction *scanAction = contextMenu.addAction("Scan For Record");
 		QAction *dataAction = contextMenu.addAction("Data");
 		QAction *waveformAction = contextMenu.addAction("Waveform");
 
-		connect(dataAction, &QAction::triggered, this, &WaveformView::onContextData);
-		connect(waveformAction, &QAction::triggered, this, &WaveformView::onContextWaveform);
+		connect(scanAction, &QAction::triggered, this,
+			[this, idx]() { ScanForRecord(idx); });
+		connect(dataAction, &QAction::triggered, this,
+			[this, idx]() { onContextData(idx); });
+		connect(waveformAction, &QAction::triggered, this,
+			[this, idx]() { onContextWaveform(idx); });
 
 		contextMenu.exec(mapToGlobal(pos));
 	}
 
-	void onContextData() {
+	void ScanForRecord(TapeIndex idx) {
+	}
+
+	void onContextData(TapeIndex idx) {
 		// placeholder - will be implemented later
 	}
 
-	void onContextWaveform() {
+	void onContextWaveform(TapeIndex idx) {
 		// placeholder - will be implemented later
 	}
 
 private:
-	AudioPtr audio_;
-	Tape *tape_ = nullptr;
+	AudioPtr audio;
+	Tape *tape = nullptr;
 
-	double xScale_ = 0.05;   // pixels per sample (start zoomed out)
-	double yScale_ = 1.0;
-	double scrollOffset_ = 0; // first sample visible at left edge
+	double xScale = 0.05;   // pixels per sample (start zoomed out)
+	double yScale = 1.0;
+	double scrollOffset = 0; // first sample visible at left edge
 
-	bool dragging_ = false;
-	double dragLastX_ = 0;
+	bool dragging = false;
+	double dragLastX = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -551,6 +563,10 @@ public:
 		setWindowTitle("PolyWaveToImage");
 		resize(1200, 800);
 
+		scrollTimer = new QTimer(this);
+		scrollTimer->setInterval(50);
+		connect(scrollTimer, &QTimer::timeout, this, &MainWindow::onScrollTimerTick);
+
 		buildMenus();
 		buildUI();
 
@@ -560,21 +576,28 @@ public:
 	AudioPtr audioPtr;
 
 private:
-	MainWindowSettings settings_;
-	Tape tape_;
+	MainWindowSettings settings;
+	Tape tape;
 
 	// UI components
-	WaveformView *waveformView_ = nullptr;
-	QScrollBar *hScrollBar_ = nullptr;
-	QLabel *indexLabel_ = nullptr;
-	QLabel *widthLabel_ = nullptr;
-	QLabel *tapeFileLabel_ = nullptr;
-	QLabel *recordNumberLabel_ = nullptr;
-	QLabel *byteLabel_ = nullptr;
-	QLabel *validityLabel_ = nullptr;
-	QWidget *bottomPlaceholder_ = nullptr;
+	WaveformView *waveformView = nullptr;
+	QScrollBar *hScrollBar = nullptr;
+	QPushButton *scrollLeftBtn = nullptr;
+	QPushButton *scrollRightBtn = nullptr;
+	QLabel *indexLabel = nullptr;
+	QLabel *widthLabel = nullptr;
+	QLabel *tapeFileLabel = nullptr;
+	QLabel *recordNumberLabel = nullptr;
+	QLabel *byteLabel = nullptr;
+	QLabel *validityLabel = nullptr;
+	QWidget *bottomPlaceholder = nullptr;
 
-	bool updatingScrollBar_ = false;
+	bool updatingScrollBar = false;
+
+	// Scroll button acceleration state
+	QTimer *scrollTimer = nullptr;
+	int scrollDirection = 0;    // -1 = left, +1 = right, 0 = stopped
+	int scrollTickCount = 0;
 
 	void buildMenus() {
 		// --- File menu ---
@@ -623,30 +646,68 @@ private:
 
 		auto *splitter = new QSplitter(Qt::Vertical, centralWidget);
 
-		// --- Top pane: waveform + scrollbar ---
+		// --- Top pane: waveform + scrollbar with buttons ---
 		auto *topWidget = new QWidget(splitter);
 		auto *topLayout = new QVBoxLayout(topWidget);
 		topLayout->setContentsMargins(0, 0, 0, 0);
 		topLayout->setSpacing(0);
 
-		waveformView_ = new WaveformView(topWidget);
-		waveformView_->setMinimumHeight(200);
-		topLayout->addWidget(waveformView_, 1);
+		waveformView = new WaveformView(topWidget);
+		waveformView->setMinimumHeight(200);
+		topLayout->addWidget(waveformView, 1);
 
-		hScrollBar_ = new QScrollBar(Qt::Horizontal, topWidget);
-		hScrollBar_->setStyleSheet(
+		// Scrollbar row with left/right buttons
+		auto *scrollRow = new QHBoxLayout();
+		scrollRow->setContentsMargins(0, 0, 0, 0);
+		scrollRow->setSpacing(0);
+
+		scrollLeftBtn = new QPushButton("<", topWidget);
+		scrollLeftBtn->setFixedWidth(24);
+		scrollLeftBtn->setAutoRepeat(false);
+		scrollRow->addWidget(scrollLeftBtn);
+
+		hScrollBar = new QScrollBar(Qt::Horizontal, topWidget);
+		hScrollBar->setStyleSheet(
 			"QScrollBar:horizontal { background: #2a2a2a; height: 16px; }"
 			"QScrollBar::handle:horizontal { background: #888888; min-width: 20px; border-radius: 3px; }"
 			"QScrollBar::handle:horizontal:hover { background: #aaaaaa; }"
 			"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }"
 		);
-		topLayout->addWidget(hScrollBar_);
+		scrollRow->addWidget(hScrollBar, 1);
 
-		connect(waveformView_, &WaveformView::scrollChanged,
+		scrollRightBtn = new QPushButton(">", topWidget);
+		scrollRightBtn->setFixedWidth(24);
+		scrollRightBtn->setAutoRepeat(false);
+		scrollRow->addWidget(scrollRightBtn);
+
+		topLayout->addLayout(scrollRow);
+
+		connect(scrollLeftBtn, &QPushButton::pressed, this, [this]() {
+			scrollDirection = -1;
+			scrollTickCount = 0;
+			onScrollTimerTick();
+			scrollTimer->start();
+		});
+		connect(scrollLeftBtn, &QPushButton::released, this, [this]() {
+			scrollDirection = 0;
+			scrollTimer->stop();
+		});
+		connect(scrollRightBtn, &QPushButton::pressed, this, [this]() {
+			scrollDirection = 1;
+			scrollTickCount = 0;
+			onScrollTimerTick();
+			scrollTimer->start();
+		});
+		connect(scrollRightBtn, &QPushButton::released, this, [this]() {
+			scrollDirection = 0;
+			scrollTimer->stop();
+		});
+
+		connect(waveformView, &WaveformView::scrollChanged,
 			this, &MainWindow::syncScrollBar);
-		connect(hScrollBar_, &QScrollBar::valueChanged,
+		connect(hScrollBar, &QScrollBar::valueChanged,
 			this, &MainWindow::onScrollBarChanged);
-		connect(waveformView_, &WaveformView::mouseSampleChanged,
+		connect(waveformView, &WaveformView::mouseSampleChanged,
 			this, &MainWindow::onMouseSampleChanged);
 
 		// --- Middle pane: status labels ---
@@ -664,36 +725,36 @@ private:
 			return valueLabel;
 		};
 
-		indexLabel_ = makeStatusPair("Index");
-		widthLabel_ = makeStatusPair("Width");
-		tapeFileLabel_ = makeStatusPair("Tape File");
-		recordNumberLabel_ = makeStatusPair("Record Number");
-		byteLabel_ = makeStatusPair("Byte");
+		indexLabel = makeStatusPair("Index");
+		widthLabel = makeStatusPair("Width");
+		tapeFileLabel = makeStatusPair("Tape File");
+		recordNumberLabel = makeStatusPair("Record Number");
+		byteLabel = makeStatusPair("Byte");
 
-		validityLabel_ = new QLabel("—", middleWidget);
+		validityLabel = new QLabel("—", middleWidget);
 		auto *validTitleLabel = new QLabel("Status:", middleWidget);
 		validTitleLabel->setStyleSheet("font-weight: bold;");
 		middleLayout->addWidget(validTitleLabel);
-		middleLayout->addWidget(validityLabel_);
+		middleLayout->addWidget(validityLabel);
 
 		middleLayout->addStretch();
 		middleWidget->setMaximumHeight(40);
 
 		// --- Bottom pane: placeholder ---
-		bottomPlaceholder_ = new QWidget(splitter);
-		auto *bottomLayout = new QVBoxLayout(bottomPlaceholder_);
+		bottomPlaceholder = new QWidget(splitter);
+		auto *bottomLayout = new QVBoxLayout(bottomPlaceholder);
 		auto *placeholderLabel = new QLabel(
 			"Tape files / records / byte layout will appear here",
-			bottomPlaceholder_);
+			bottomPlaceholder);
 		placeholderLabel->setAlignment(Qt::AlignCenter);
 		placeholderLabel->setStyleSheet("color: gray;");
 		bottomLayout->addWidget(placeholderLabel);
-		bottomPlaceholder_->setMinimumHeight(100);
+		bottomPlaceholder->setMinimumHeight(100);
 
 		// Set splitter proportions
 		splitter->addWidget(topWidget);
 		splitter->addWidget(middleWidget);
-		splitter->addWidget(bottomPlaceholder_);
+		splitter->addWidget(bottomPlaceholder);
 		splitter->setStretchFactor(0, 5);
 		splitter->setStretchFactor(1, 0);
 		splitter->setStretchFactor(2, 2);
@@ -703,88 +764,95 @@ private:
 	}
 
 	// Sync the horizontal scrollbar to match the WaveformView state.
-	// Uses an adaptive logarithmic mapping for large data sets.
 	void syncScrollBar() {
-		if (!waveformView_ || updatingScrollBar_) return;
-		updatingScrollBar_ = true;
+		if (!waveformView || updatingScrollBar) return;
+		updatingScrollBar = true;
 
-		double total = waveformView_->totalSamples();
-		double visible = waveformView_->visibleSamples();
-		double offset = waveformView_->getScrollOffset();
+		double total = waveformView->totalSamples();
+		double visible = waveformView->visibleSamples();
+		double offset = waveformView->getScrollOffset();
 
-		// Use a logarithmic mapping: scrollbar position is proportional
-		// to log(1 + offset) / log(1 + total).
-		// This gives fine-grained control near the current position
-		// and coarser jumps at the extremes.
+		// Linear scrollbar mapping
 		const int scrollRange = 100000;
 
 		if (total <= visible) {
-			hScrollBar_->setRange(0, 0);
-			hScrollBar_->setValue(0);
+			hScrollBar->setRange(0, 0);
+			hScrollBar->setValue(0);
 		} else {
-			double logTotal = std::log1p(total);
-			int pos = static_cast<int>(std::log1p(offset) / logTotal * scrollRange);
-			int pageStep = static_cast<int>(std::log1p(visible) / logTotal * scrollRange);
+			double maxOffset = total - visible;
+			int pos = static_cast<int>(offset / maxOffset * scrollRange);
+			int pageStep = static_cast<int>(visible / total * scrollRange);
 			pageStep = std::max(pageStep, 1);
 
-			hScrollBar_->setRange(0, scrollRange);
-			hScrollBar_->setPageStep(pageStep);
-			hScrollBar_->setValue(pos);
+			hScrollBar->setRange(0, scrollRange);
+			hScrollBar->setPageStep(pageStep);
+			hScrollBar->setValue(pos);
 		}
-		updatingScrollBar_ = false;
+		updatingScrollBar = false;
 
 		// Update Index and Width labels
-		indexLabel_->setText(QString::number(static_cast<qint64>(offset)));
-		widthLabel_->setText(QString::number(static_cast<qint64>(visible)));
+		indexLabel->setText(QString::number(static_cast<qint64>(offset)));
+		widthLabel->setText(QString::number(static_cast<qint64>(visible)));
 	}
 
 private slots:
-	void onScrollBarChanged(int value) {
-		if (updatingScrollBar_ || !waveformView_) return;
-		updatingScrollBar_ = true;
+	void onScrollTimerTick() {
+		if (!waveformView || scrollDirection == 0) return;
+		scrollTickCount++;
+		// Accelerate: base step * (1 + tickCount), so speed grows the longer held
+		double baseStep = waveformView->visibleSamples() * 0.02;
+		double step = baseStep * (1.0 + scrollTickCount * 0.5);
+		waveformView->setScrollOffset(
+			waveformView->getScrollOffset() + scrollDirection * step);
+	}
 
-		double total = waveformView_->totalSamples();
+	void onScrollBarChanged(int value) {
+		if (updatingScrollBar || !waveformView) return;
+		updatingScrollBar = true;
+
+		double total = waveformView->totalSamples();
+		double visible = waveformView->visibleSamples();
 		const int scrollRange = 100000;
 
-		// Inverse of log mapping: offset = exp(value / scrollRange * log(1+total)) - 1
-		double logTotal = std::log1p(total);
-		double offset = std::expm1(static_cast<double>(value) / scrollRange * logTotal);
+		// Linear inverse mapping
+		double maxOffset = total - visible;
+		double offset = static_cast<double>(value) / scrollRange * maxOffset;
 
-		waveformView_->setScrollOffset(offset);
-		updatingScrollBar_ = false;
+		waveformView->setScrollOffset(offset);
+		updatingScrollBar = false;
 	}
 
 	void onMouseSampleChanged(double sampleIndex) {
 		if (!audioPtr || sampleIndex < 0 ||
 			sampleIndex >= audioPtr->SampleCount()) {
-			tapeFileLabel_->setText("—");
-			recordNumberLabel_->setText("—");
-			byteLabel_->setText("—");
-			validityLabel_->setText("—");
-			validityLabel_->setStyleSheet("");
+			tapeFileLabel->setText("—");
+			recordNumberLabel->setText("—");
+			byteLabel->setText("—");
+			validityLabel->setText("—");
+			validityLabel->setStyleSheet("");
 			return;
 		}
 
 		bool found = false;
 		int fileIdx = 0;
-		for (auto &file : tape_.GetFiles()) {
+		for (auto &file : tape.GetFiles()) {
 			int recIdx = 0;
 			for (auto &record : file.GetRecords()) {
 				if (record.ContainsIndex(sampleIndex)) {
-					tapeFileLabel_->setText(
+					tapeFileLabel->setText(
 						QString::fromStdString(record.GetName()).trimmed());
-					recordNumberLabel_->setText(
+					recordNumberLabel->setText(
 						QString::number(record.GetRecordNumber()));
 					std::string fieldName = record.FieldNameAtIndex(sampleIndex);
-					byteLabel_->setText(QString::fromStdString(fieldName));
+					byteLabel->setText(QString::fromStdString(fieldName));
 
 					if (record.RecordIsValid()) {
-						validityLabel_->setText("valid");
-						validityLabel_->setStyleSheet(
+						validityLabel->setText("valid");
+						validityLabel->setStyleSheet(
 							"color: green; font-weight: bold;");
 					} else {
-						validityLabel_->setText("invalid");
-						validityLabel_->setStyleSheet(
+						validityLabel->setText("invalid");
+						validityLabel->setStyleSheet(
 							"color: red; font-weight: bold;");
 					}
 					found = true;
@@ -797,11 +865,11 @@ private slots:
 		}
 
 		if (!found) {
-			tapeFileLabel_->setText("—");
-			recordNumberLabel_->setText("—");
-			byteLabel_->setText("—");
-			validityLabel_->setText("—");
-			validityLabel_->setStyleSheet("");
+			tapeFileLabel->setText("—");
+			recordNumberLabel->setText("—");
+			byteLabel->setText("—");
+			validityLabel->setText("—");
+			validityLabel->setStyleSheet("");
 		}
 	}
 
@@ -813,8 +881,8 @@ private slots:
 
 		try {
 			audioPtr = std::make_shared<Audio>(fileName.toStdString());
-			waveformView_->setAudio(audioPtr);
-			waveformView_->setTape(&tape_);
+			waveformView->setAudio(audioPtr);
+			waveformView->setTape(&tape);
 			statusBar()->showMessage(
 				"Loaded: " + fileName +
 				" (" + QString::number(audioPtr->SampleCount()) + " samples)");
@@ -833,7 +901,7 @@ private slots:
 	}
 
 	void onSettings() {
-		SettingsDialog dlg(settings_, this);
+		SettingsDialog dlg(settings, this);
 		dlg.exec();
 	}
 
