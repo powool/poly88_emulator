@@ -38,16 +38,13 @@ class PolyAudioTapeDecoder {
 
 	int bitRate;	// bit per second
 
-	bool bitSync;
 	bool byteSync;
-	bool recordSync;
 	Audio &audio;
 
 public:
 	PolyAudioTapeDecoder(Audio &_audio) : audio(_audio) {
 		debug = false;
 		bitCellStartIndex = 0;
-		bitSync = false;
 		SetBitRate(2400);
 		lastBit = 0;
 	}
