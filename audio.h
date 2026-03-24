@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-class AudioEOF : std::runtime_error {
+class AudioEOF : public std::runtime_error {
 public:
 	AudioEOF(const char *s) : std::runtime_error(s) {;}
 };
@@ -91,5 +91,5 @@ public:
 	//                                   30 40 50 50 50 40 30
 	bool IsAPeak(int index);
 
-	void Dump(std::ostream &stream, int index);
+	void Dump(std::ostream &stream, int index, int count = 0);
 };
