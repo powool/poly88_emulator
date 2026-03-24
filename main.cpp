@@ -378,6 +378,7 @@ class MainWindow : public QMainWindow
 		connect(quickHelpAction, &QAction::triggered, this, [this]() {
 			QMessageBox dlg(this);
 			dlg.setWindowTitle("Quick Help");
+			dlg.setStyleSheet("QMessageBox { background-color: #1e1e2e; } QLabel { color: #cdd6f4; font-size: 13px; } QPushButton { background-color: #45475a; color: #cdd6f4; padding: 6px 16px; border-radius: 4px; }");
 			dlg.setTextFormat(Qt::MarkdownText);
 			dlg.setText(
 				"## Keyboard Shortcuts\n\n"
@@ -406,6 +407,7 @@ class MainWindow : public QMainWindow
 		connect(aboutAction, &QAction::triggered, this, [this]() {
 			QMessageBox dlg(this);
 			dlg.setWindowTitle("About Poly-88 Emulator");
+			dlg.setStyleSheet("QMessageBox { background-color: #1e1e2e; } QLabel { color: #cdd6f4; font-size: 13px; } QPushButton { background-color: #45475a; color: #cdd6f4; padding: 6px 16px; border-radius: 4px; }");
 			dlg.setTextFormat(Qt::MarkdownText);
 			dlg.setText(
 				"## Poly-88 Emulator\n\n"
@@ -538,8 +540,7 @@ class MainWindow : public QMainWindow
 		addRegRow(5, "PC", pcLabel);
 
 		regGroup->setLayout(regGrid);
-		regGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-		mainLayout->addWidget(regGroup, 0);
+		regGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
 		// Make register labels clickable for editing
 		bcLabel->installEventFilter(this);
@@ -548,7 +549,7 @@ class MainWindow : public QMainWindow
 		spLabel->installEventFilter(this);
 		pcLabel->installEventFilter(this);
 
-		// -- Trace output with header --
+		// -- Trace output --
 		auto *traceGroup = new QGroupBox("Instruction Trace");
 		auto *traceLayout = new QVBoxLayout;
 		traceLayout->setContentsMargins(4, 4, 4, 4);
@@ -559,16 +560,22 @@ class MainWindow : public QMainWindow
 		traceOutput->setFont(uiFont);
 		traceOutput->setLineWrapMode(QPlainTextEdit::NoWrap);
 		traceOutput->setPlaceholderText("Enable Trace and step to see instructions here...");
-		traceOutput->setMinimumHeight(60);
 		traceLayout->addWidget(traceOutput, 1);
 		traceGroup->setLayout(traceLayout);
-		mainLayout->addWidget(traceGroup, 1);
+
+		// -- Registers + Trace side by side --
+		auto *regTraceRow = new QHBoxLayout;
+		regTraceRow->setSpacing(8);
+		regTraceRow->addWidget(regGroup, 0);
+		regTraceRow->addWidget(traceGroup, 1);
+		mainLayout->addLayout(regTraceRow, 1);
 
 		centralWidget->setLayout(mainLayout);
 		this->setCentralWidget(centralWidget);
 
 		// ---- Status bar ----
 		auto *sb = this->statusBar();
+#if 0
 		statusRunLabel = new QLabel("Stopped");
 		statusRunLabel->setStyleSheet("font-weight: bold;");
 		sb->addWidget(statusRunLabel);
@@ -577,7 +584,7 @@ class MainWindow : public QMainWindow
 		sbSep1->setFrameShape(QFrame::VLine);
 		sbSep1->setStyleSheet("color: #45475a;");
 		sb->addWidget(sbSep1);
-
+#endif
 		interruptLabel = new QLabel("Interrupts Enabled");
 		sb->addWidget(interruptLabel);
 
@@ -631,13 +638,13 @@ class MainWindow : public QMainWindow
 		loadImageAction->setEnabled(!running);
 
 		// Buttons
-		runStopButton->setText(running ? "Stop" : "Run");
-		runStopButton->setProperty("running", running);
+		runStopButton->setText(running ? "Running" : "Stopped");
+		runStopButton->setProperty("running", !running);
 		runStopButton->style()->unpolish(runStopButton);
 		runStopButton->style()->polish(runStopButton);
 		singleStepButton->setEnabled(!running);
 		resetButton->setEnabled(!running);
-
+#if 0
 		// Status bar
 		if (running) {
 			statusRunLabel->setText("Running");
@@ -646,7 +653,7 @@ class MainWindow : public QMainWindow
 			statusRunLabel->setText("Stopped");
 			statusRunLabel->setStyleSheet("color: #f9e2af; font-weight: bold;");
 		}
-
+#endif
 		interruptLabel->setText(emulator->InterruptEnable() ? "INT Enabled" : "INT Disabled");
 		interruptLabel->setStyleSheet(emulator->InterruptEnable()
 			? "color: #a6e3a1;" : "color: #585b70;");
@@ -696,8 +703,8 @@ class MainWindow : public QMainWindow
 
 	void SingleStep() {
 		if (!emulator->Running()) {
-			AppendTrace();
 			emulator->RunOneInstruction();
+			AppendTrace();
 			UpdateUI();
 		}
 	}
