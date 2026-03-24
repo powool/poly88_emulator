@@ -25,24 +25,24 @@ Devices::Devices()
 
 void Devices::AddDevice(DevicePtr device)
 {
-	m_devices.push_back(device);
+	devices.push_back(device);
 
-	m_inputPorts[device->m_inputPort] = device;
-	m_outputPorts[device->m_outputPort] = device;
+	inputPorts[device->inputPort] = device;
+	outputPorts[device->outputPort] = device;
 
-	m_interruptVector[device->m_IRQ] = device;
+	interruptVector[device->IRQ] = device;
 }
 
 // returns true if we were able to trigger our interrupt
 bool Device::CheckInterrupt(I8080 *cpu)
 {
-	if(m_interruptPending)
+	if(interruptPending)
 	{
 		// only deliver an interrupt if we're not already doing one
-		if(cpu->InterruptEnable() && cpu->Interrupt(m_IRQ))
+		if(cpu->InterruptEnable() && cpu->Interrupt(IRQ))
 		{
-			if(m_debug)
-				std::cerr << m_name << ": triggerring CPU interrupt " << (uint16_t) m_IRQ << std::endl;
+			if(debug)
+				std::cerr << name << ": triggerring CPU interrupt " << (uint16_t) IRQ << std::endl;
 			return true;
 		}
 	}
@@ -55,7 +55,7 @@ Devices::CheckInterrupts(I8080 *cpu)
 	if(!cpu->InterruptEnable())
 		return;
 
-	for(auto &device : m_interruptVector)
+	for(auto &device : interruptVector)
 		if(device)
 			if(device->CheckInterrupt(cpu))
 				break;

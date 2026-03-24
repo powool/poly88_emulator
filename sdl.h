@@ -3,10 +3,10 @@
 class Csdl
 {
     SDL_Window *window;
-    SDL_Renderer *m_renderer;
+    SDL_Renderer *_renderer;
     static int  sdl_reference_count;
     int window_width, window_height;
-	bool m_needsUpdate = false;
+	bool needsUpdate = false;
 public:
 
     Csdl();
@@ -21,6 +21,6 @@ public:
     void update();
     int get_keystroke(bool poll = true); // return -1 if none available
     int blit2screen(SDL_Texture *src, SDL_Rect &dstrect);
-    SDL_Renderer *renderer() { return m_renderer; }
+    SDL_Renderer *renderer() { return _renderer; }
 };
 

@@ -27,22 +27,22 @@ static std::vector<std::string> GetArgv(const std::string& inputLine, char delim
 
 Poly88::Poly88()
 {
-	m_keyboard = std::make_shared<KeyBoard>(*this, m_devices);
-	m_devices.AddDevice(m_keyboard);
-	m_devices.AddDevice(std::make_shared<Timer>(*this, m_devices));
-	m_devices.AddDevice(std::make_shared<BaudRateGenerator>(*this, m_devices));
+	keyboard = std::make_shared<KeyBoard>(*this, devices);
+	devices.AddDevice(keyboard);
+	devices.AddDevice(std::make_shared<Timer>(*this, devices));
+	devices.AddDevice(std::make_shared<BaudRateGenerator>(*this, devices));
 
-	m_usart = std::make_shared<Usart>(*this, m_devices);
-	m_usartControl = std::make_shared<UsartControl>(*this, m_devices, m_usart);
-	m_devices.AddDevice(m_usart);
-	m_devices.AddDevice(m_usartControl);
+	usart = std::make_shared<Usart>(*this, devices);
+	usartControl = std::make_shared<UsartControl>(*this, devices, usart);
+	devices.AddDevice(usart);
+	devices.AddDevice(usartControl);
 
-	m_devices.StartDevices();
+	devices.StartDevices();
 }
 
 Poly88::~Poly88()
 {
-	m_devices.StopDevices();
+	devices.StopDevices();
 }
 
 void Poly88::ReadStartupFile()
@@ -72,7 +72,7 @@ bool Poly88::RunEmulatorCommand(const std::vector<std::string> &args)
 		return true;
 	}
 
-	m_usartControl->RunEmulatorCommand(args);
+	usartControl->RunEmulatorCommand(args);
 	I8080::RunEmulatorCommand(args);
 	return false;
 }
@@ -89,13 +89,13 @@ bool Poly88::Run(uint64_t &machineCycle)
 
 	// every 1K cycles, check interrupts
 	if(((machineCycle%1000)==0)) {
-		m_usartControl->Poll();
-		if(m_keyboard->Poll()) {
+		usartControl->Poll();
+		if(keyboard->Poll()) {
 			std::cout << "User closed application." << std::endl;
 			return true;
 		}
 		if(InterruptEnable())
-			m_devices.CheckInterrupts(this);  // may reset PC
+			devices.CheckInterrupts(this);  // may reset PC
 	}
 
 	if(Halt())
@@ -107,7 +107,7 @@ bool Poly88::Run(uint64_t &machineCycle)
 		return false;
 	}
 
-	if(ExecuteCycle(&m_devices)) {
+	if(ExecuteCycle(&devices)) {
 		std::cout << "bad instruction!" << std::endl;
 		return false;
 	}

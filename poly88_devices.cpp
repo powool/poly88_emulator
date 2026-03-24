@@ -31,10 +31,10 @@ MyIntSleep(int t)
 KeyBoard::KeyBoard(I8080 &i8080, Devices &devices) :
 	Device(i8080, devices)
 {
-	m_IRQ = 5;
-	m_inputPort = 0xf8;
-	m_debug = false;
-	m_name = "Keyboard";
+	IRQ = 5;
+	inputPort = 0xf8;
+	debug = false;
+	name = "Keyboard";
 }
 
 void KeyBoard::StartUp()
@@ -48,17 +48,17 @@ void KeyBoard::ShutDown()
 
 uint8_t KeyBoard::Read()
 {
-	if(m_keys.size())
+	if(keys.size())
 	{
-		m_lastKey = m_keys.front();
-		m_keys.pop();
+		lastKey = keys.front();
+		keys.pop();
 	}
 
 	// clear interrupt pending when circular buffer is cleared
-	if(!m_keys.size())
+	if(!keys.size())
 		SetInterruptPending(false);
 
-	return m_lastKey;
+	return lastKey;
 }
 
 void KeyBoard::Write(uint8_t data)
@@ -81,7 +81,7 @@ bool KeyBoard::Poll()
 				{
 					char *s = event.text.text;
 					while(*s) {
-						m_keys.push(*s);
+						keys.push(*s);
 						s++;
 					}
 				}
@@ -102,17 +102,17 @@ bool KeyBoard::Poll()
 				auto key = event.key.keysym.sym;
 				if(key < 0x100 && isalpha(key) && event.key.keysym.mod & KMOD_CTRL) {
 					// handle control chars
-					m_keys.push(key & ~0x60);
+					keys.push(key & ~0x60);
 				} else if(key < 0x20 || key == 0x7f) {
 					// handle everything else that is not control, nor is text
-					m_keys.push(key);
-				} else if(m_debug) {
+					keys.push(key);
+				} else if(debug) {
 						fprintf(stderr, "keysym.sym = 0x%02x keysym.mod = 0x%02x\n", event.key.keysym.sym, event.key.keysym.mod);
 				}
 				break;
 		}
 	}
-	if(m_keys.size())
+	if(keys.size())
 		SetInterruptPending(true);
 	return false;
 }
@@ -120,32 +120,32 @@ bool KeyBoard::Poll()
 Timer::Timer(I8080 &i8080, Devices &devices) :
 	Device(i8080, devices)
 {
-	m_IRQ = 6;
-	m_outputPort = 8;
-	m_name = "Timer";
+	IRQ = 6;
+	outputPort = 8;
+	name = "Timer";
 }
 
 Timer::~Timer()
 {
-	m_timerCallback = nullptr;
+	timerCallback = nullptr;
 }
 
-std::function<void()>    Timer::m_timerCallback;
+std::function<void()>    Timer::timerCallback;
 
 // Signal handler has to be a static function,
 // so it will call a function object bound to
 // the class method to set interrupt pending.
 void Timer::Interrupt(int signum)
 {
-	if(m_timerCallback)
-		m_timerCallback();
+	if(timerCallback)
+		timerCallback();
 }
 
 void Timer::StartUp()
 {
 	struct itimerval it;
 
-	m_timerCallback = std::bind(&Timer::SetInterruptPending, this, true);
+	timerCallback = std::bind(&Timer::SetInterruptPending, this, true);
 
 	signal(SIGALRM, &Timer::Interrupt);
 	it.it_interval.tv_sec = 0;
@@ -168,7 +168,7 @@ void Timer::ShutDown()
 		perror("setitimer call:");
 	signal(SIGALRM, SIG_DFL);
 
-	m_timerCallback = nullptr;
+	timerCallback = nullptr;
 }
 
 uint8_t Timer::Read()
@@ -186,11 +186,11 @@ void Timer::Write(uint8_t data)
 Usart::Usart(I8080 &i8080, Devices &devices) :
 	Device(i8080, devices)
 {
-	m_inputPort = 0x00;
-	m_outputPort = 0x00;
-	m_IRQ = 4;
-	m_name = "USART";
-	m_debug = false;
+	inputPort = 0x00;
+	outputPort = 0x00;
+	IRQ = 4;
+	name = "USART";
+	debug = false;
 }
 
 void Usart::StartUp() { }
@@ -200,14 +200,14 @@ void Usart::ShutDown() { }
 uint8_t Usart::Read()
 {
 	uint8_t ch = 0;
-	if(m_usartFile)
-		ch = m_usartFile->Read();
+	if(usartFile)
+		ch = usartFile->Read();
 
 	// Always set to false - poll will turn it back on if need be -
 	// this allows rate limiting to work
 	SetInterruptPending(false);
 
-	if(m_debug)
+	if(debug)
 		std::cout << "Usart::Read() returns: " << util::hex(2) << (uint16_t) ch << std::endl;
 	return ch;
 #if 0
@@ -263,8 +263,8 @@ uint8_t Usart::Read()
 void Usart::Write(uint8_t data)
 {
 	std::cerr << "usart output byte: " << util::hex(2) << (uint16_t) data << std::endl;
-	if(m_usartFile)
-		m_usartFile->Write(data);
+	if(usartFile)
+		usartFile->Write(data);
 	SetInterruptPending(false);
 #if 0
 #ifdef DEBUG_USART_INTERRUPT
@@ -317,12 +317,12 @@ void Usart::Write(uint8_t data)
 
 
 UsartControl::UsartControl(I8080 &i8080, Devices &devices, std::shared_ptr<Usart> usart) :
-	m_usart(usart),
+	usart(usart),
 	Device(i8080, devices)
 {
-	m_inputPort = 0x01;
-	m_outputPort = 0x01;
-	m_tapeRunning = false;
+	inputPort = 0x01;
+	outputPort = 0x01;
+	tapeRunning = false;
 }
 
 void UsartControl::StartUp() { }
@@ -341,8 +341,8 @@ uint8_t UsartControl::Read()
 	}
 
 	byte_t status = 0;
-	if(m_usart->m_usartFile && m_usart->m_usartFile->Ready())
-		switch(m_usart->m_usartFile->GetState()) {
+	if(usart->usartFile && usart->usartFile->Ready())
+		switch(usart->usartFile->GetState()) {
 			case IUsartFile::INPUT:
 				status |= 0x02;
 				break;
@@ -471,11 +471,11 @@ bool UsartControl::RunEmulatorCommand(const std::vector<std::string> &args)
 
 void UsartControl::Write(uint8_t data)
 {
-	if(m_debug)
+	if(debug)
 		std::cerr << "Usart control write: " << util::hex(2) << (uint16_t) data << std::endl;
 	try {
 		if(data == 0x96) {
-			if(!m_usart->m_usartFile) {
+			if(!usart->usartFile) {
 				std::string filename;
 
 				if (readFiles.empty()) {
@@ -490,11 +490,11 @@ void UsartControl::Write(uint8_t data)
 				SetUsartFile(std::make_shared<UsartInputFile>(filename));
 				// polling rate limits.
 				// here we want interrupts, because input is interrupt driven
-				m_usart->SetInterruptPending(true);
-				m_tapeRunning = true;
+				usart->SetInterruptPending(true);
+				tapeRunning = true;
 			}
 		} else if(data == 0x26 || data == 0x21) {
-			if(!m_usart->m_usartFile) {
+			if(!usart->usartFile) {
 				std::string filename;
 				if (readFiles.empty()) {
 					std::cout << "starting the mag tape for write!" << std::endl;
@@ -506,21 +506,21 @@ void UsartControl::Write(uint8_t data)
 					std::cout << "opening pre-queued tape file for write: " << filename << std::endl;
 				}
 				SetUsartFile(std::make_shared<UsartOutputFile>(filename));
-				m_usart->SetInterruptPending(true);
-				m_tapeRunning = true;
+				usart->SetInterruptPending(true);
+				tapeRunning = true;
 			}
 		} else if(data == 0x00) {
-			if(m_usart->m_usartFile) {
-				if(m_usart->m_usartFile->GetState() == IUsartFile::INPUT) {
+			if(usart->usartFile) {
+				if(usart->usartFile->GetState() == IUsartFile::INPUT) {
 					std::cout << "stop the mag tape!" << std::endl;
 					SetUsartFile(nullptr);
-					m_usart->SetInterruptPending(false);
+					usart->SetInterruptPending(false);
 				}
 
 				// This lets Usart::Poll close the output tape file
 				// because basic is shutting off the tape device every record.
-				m_tapeRunning = false;
-				m_tapeTimeout = time(nullptr);
+				tapeRunning = false;
+				tapeTimeout = time(nullptr);
 			}
 		}
 	}
@@ -533,14 +533,14 @@ void UsartControl::Poll()
 {
 	static struct timespec t1 = {0,0};
 
-	if(m_usart->m_usartFile && m_usart->m_usartFile->Ready())
+	if(usart->usartFile && usart->usartFile->Ready())
 	{
-		if(m_usart->m_usartFile->GetState() == IUsartFile::OUTPUT &&
-			!m_tapeRunning &&
-			m_tapeTimeout + 3 < time(nullptr)) {
+		if(usart->usartFile->GetState() == IUsartFile::OUTPUT &&
+			!tapeRunning &&
+			tapeTimeout + 3 < time(nullptr)) {
 			std::cerr << "closing output file." << std::endl;
 			SetUsartFile(nullptr);
-			m_usart->SetInterruptPending(false);
+			usart->SetInterruptPending(false);
 			return;
 		}
 
@@ -554,7 +554,7 @@ void UsartControl::Poll()
 		if(t2F - t1F > .0005)
 		{
 			t1 = t2;
-			m_usart->SetInterruptPending(true);
+			usart->SetInterruptPending(true);
 		}
 	}
 }
@@ -562,8 +562,8 @@ void UsartControl::Poll()
 BaudRateGenerator::BaudRateGenerator(I8080 &i8080, Devices &devices) :
 	Device(i8080, devices)
 {
-	m_inputPort = 0x04;
-	m_outputPort = 0x04;
+	inputPort = 0x04;
+	outputPort = 0x04;
 }
 
 void BaudRateGenerator::StartUp() { }

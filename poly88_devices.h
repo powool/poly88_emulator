@@ -14,8 +14,8 @@ extern void Command(const char *msg = NULL);
 
 class KeyBoard : public Device
 {
-	std::queue<uint8_t>	m_keys;
-	uint8_t m_lastKey;
+	std::queue<uint8_t>	keys;
+	uint8_t lastKey;
 public:
 	KeyBoard(I8080 &i8080, Devices &devices);
 	void StartUp() override;
@@ -28,7 +28,7 @@ public:
 class Timer : public Device
 {
 	static void Interrupt(int signum);
-	static std::function<void()>	m_timerCallback;
+	static std::function<void()>	timerCallback;
 public:
 	Timer(I8080 &i8080, Devices &devices);
 	~Timer();
@@ -49,53 +49,53 @@ public:
 	virtual uint8_t Ready() = 0;
 	virtual uint8_t Read() = 0;
 	virtual void Write(uint8_t data) = 0;
-	State GetState() { return m_usartState; }
+	State GetState() { return usartState; }
 protected:
-	State m_usartState;
-	std::string	m_filename;
+	State usartState;
+	std::string	filename;
 };
 
 class UsartInputFile : public IUsartFile
 {
 public:
-	UsartInputFile(std::string filename) : m_input(filename, std::ios_base::binary)
+	UsartInputFile(std::string filename) : input(filename, std::ios_base::binary)
 	{
-		if (m_input.fail()) {
+		if (input.fail()) {
 			throw std::invalid_argument(std::string("can't open file: " + filename));
 		}
-		m_usartState = INPUT;
-		m_filename = filename;
-		std::cerr << "Open input file: " << m_filename << std::endl;
+		usartState = INPUT;
+		filename = filename;
+		std::cerr << "Open input file: " << filename << std::endl;
 	}
 	~UsartInputFile() {
-		std::cerr << "Close input file: " << m_filename << std::endl;
+		std::cerr << "Close input file: " << filename << std::endl;
 	}
-	uint8_t Ready() { return !m_input.eof(); }
-	uint8_t Read() { return m_input.get(); }
+	uint8_t Ready() { return !input.eof(); }
+	uint8_t Read() { return input.get(); }
 	void Write(uint8_t data) { ; }
 private:
-	std::ifstream	m_input;
+	std::ifstream	input;
 };
 
 class UsartOutputFile : public IUsartFile
 {
 public:
-	UsartOutputFile(std::string filename) : m_output(filename, std::ios_base::binary)
+	UsartOutputFile(std::string filename) : output(filename, std::ios_base::binary)
 	{
-		m_usartState = OUTPUT;
-		m_filename = filename;
+		usartState = OUTPUT;
+		filename = filename;
 		std::cerr << "Open output file: " << filename << std::endl;
 	}
 	~UsartOutputFile() {
-		std::cerr << "Close output file: " << m_filename << std::endl;
+		std::cerr << "Close output file: " << filename << std::endl;
 	}
 	uint8_t Ready() { return true; }
 	uint8_t Read() { return 0; }
 	void Write(uint8_t data) {
-		m_output.put(data);
+		output.put(data);
 	}
 private:
-	std::ofstream	m_output;
+	std::ofstream	output;
 };
 
 class Usart : public Device
@@ -108,7 +108,7 @@ public:
 	uint8_t Read() override;
 	void Write(uint8_t data) override;
 protected:
-	std::shared_ptr<IUsartFile> m_usartFile;
+	std::shared_ptr<IUsartFile> usartFile;
 };
 
 // Usart control
@@ -122,13 +122,13 @@ public:
 	void ShutDown() override;
 	uint8_t Read() override;
 	void Write(uint8_t data) override;
-	void SetUsartFile(std::shared_ptr<IUsartFile> usartFile) { m_usart->m_usartFile = usartFile; }
+	void SetUsartFile(std::shared_ptr<IUsartFile> usartFile) { usart->usartFile = usartFile; }
 	void Poll();
 	bool RunEmulatorCommand(const std::vector<std::string> &args);
 private:
-	std::shared_ptr<Usart> m_usart;
-	bool m_tapeRunning;
-	int	m_tapeTimeout;
+	std::shared_ptr<Usart> usart;
+	bool tapeRunning;
+	int	tapeTimeout;
 };
 
 // Baud Rate Generator - NOP on port 4
