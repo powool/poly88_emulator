@@ -15,95 +15,88 @@
 #include <unistd.h>
 #include "audio.h"
 
-// Decode 300 baud byte format data, which is a two tone encoding (AKA
-// frequency shift key - FSK), where 1200HZ represents a 0, and 2400HZ
-// represents a 1.
-//
-// To my knowledge, 300 bits per second is the only speed byte encoded tape I have.
-std::pair<int, int> DecodeByteEncodedBit(Audio &audio, int index, int bitRate) {
-	int samplesPerBit = audio.SamplesPerBit(bitRate);
-	int initialIndex = index;
-
-	// samples per second / cycles per second / 2 => samples per half wave cycle:
-	int halfWave2400HZSampleCount = audio.SampleRate() / 2400 / 2;
-
-	// On transitions from 0 (1200HZ) to 1 (2400HZ), there seems to
-	// be significant skew in the 2400HZ waveform, causing the first cycle
-	// of the following 1 to be included in the current 0.
-	// NB: does this heuristic introduce problems elsewhere?
-	auto lastIndex = index + samplesPerBit - halfWave2400HZSampleCount;
-
-	int fullWaveCount = 0;
-	int indexOfLastPeak = std::numeric_limits<int>::max();
-
-#if 0
-	std::cout << index << ", " << audio.TimeOffset(index) << "s: start reading bit" << std::endl;
-#endif
-
-	while (index < lastIndex) {
-		// count peaks - but don't use adjacent samples, as they can be noisy:
-		if (audio.IsAPeak(index)) {
-			if (abs(indexOfLastPeak - index) > 10) {
-				fullWaveCount++;
-				indexOfLastPeak = index;
-			}
-		}
-		index++;
-	}
-
-	// Recode full wave count found to 0 or 1 bit.
-	// Getting edge cases exactly right is hard in the face
-	// of signal noise, so fudge on peak counting.
-	int resultBit;
-	switch(fullWaveCount) {
-		case 3:
-		case 4:
-		case 5:
-			resultBit = 0;
-			break;
-		case 7:
-		case 8:
-		case 9:
-			resultBit = 1;
-			break;
-		default:
-			resultBit = 2;
-#if 0
-			std::cout << initialIndex << ", " << audio.TimeOffset(initialIndex) << "s: fullWaveCount = " << fullWaveCount << " lost sync" << std::endl;
-#endif
-			break;
-	}
-
-	return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak));
-}
-
 class PolyAudioTapeDecoder {
 	bool debug;
 	const int bitRate = 300;	// bit per second
-	std::pair<int, int> (*bitDecoder)(Audio &, int, int);
 	int syncedIndex;
 	Audio &audio;
 
+	// Decode 300 baud byte format data, which is a two tone encoding (AKA
+	// frequency shift key - FSK), where 1200HZ represents a 0, and 2400HZ
+	// represents a 1.
+	//
+	// To my knowledge, 300 bits per second is the only speed byte encoded tape I have.
+	std::pair<int, int> DecodeByteEncodedBit(int index) {
+		int samplesPerBit = audio.SamplesPerBit(bitRate);
+		int initialIndex = index;
+
+		// samples per second / cycles per second / 2 => samples per half wave cycle:
+		int halfWave2400HZSampleCount = audio.SampleRate() / 2400 / 2;
+
+		// On transitions from 0 (1200HZ) to 1 (2400HZ), there seems to
+		// be significant skew in the 2400HZ waveform, causing the first cycle
+		// of the following 1 to be included in the current 0.
+		// NB: does this heuristic introduce problems elsewhere?
+		auto lastIndex = index + samplesPerBit - halfWave2400HZSampleCount;
+
+		int fullWaveCount = 0;
+		int indexOfLastPeak = std::numeric_limits<int>::max();
+
+#if 0
+		std::cout << index << ", " << audio.TimeOffset(index) << "s: start reading bit" << std::endl;
+#endif
+
+		while (index < lastIndex) {
+			// count peaks - but don't use adjacent samples, as they can be noisy:
+			if (audio.IsAPeak(index)) {
+				if (abs(indexOfLastPeak - index) > 10) {
+					fullWaveCount++;
+					indexOfLastPeak = index;
+				}
+			}
+			index++;
+		}
+
+		// Recode full wave count found to 0 or 1 bit.
+		// Getting edge cases exactly right is hard in the face
+		// of signal noise, so fudge on peak counting.
+		int resultBit;
+		switch(fullWaveCount) {
+			case 3:
+			case 4:
+			case 5:
+				resultBit = 0;
+				break;
+			case 7:
+			case 8:
+			case 9:
+				resultBit = 1;
+				break;
+			default:
+				resultBit = 2;
+#if 0
+				std::cout << initialIndex << ", " << audio.TimeOffset(initialIndex) << "s: fullWaveCount = " << fullWaveCount << " lost sync" << std::endl;
+#endif
+				break;
+		}
+
+		return std::make_pair(resultBit, audio.FindThisOrNextZeroCrossing(indexOfLastPeak));
+	}
+
 public:
-	PolyAudioTapeDecoder(std::pair<int, int> (*bitDecoder)(Audio &, int, int), Audio &_audio) : audio(_audio) {
+	PolyAudioTapeDecoder(Audio &_audio) : audio(_audio) {
 		debug = false;
-		this->bitDecoder = bitDecoder;
 		syncedIndex = 0;
 	}
 
 	void SetDebug(int debug) { this->debug = debug; }
 
-	std::pair<int, int> BitRead(int index) {
-		return bitDecoder(audio, index, bitRate);
-	}
-
 	// return the index of the next valid bit, throw on out of data
 	int SyncToValidBit(int index) {
-		auto lastIndex = audio.SampleCount() - 2 * audio.SamplesPerBit(bitRate);
-		while(index < lastIndex) {
+		while(index < audio.SampleCount()) {
 			index = audio.FindThisOrNextZeroCrossing(index);
 
-			auto bit = BitRead(index);
+			auto bit = DecodeByteEncodedBit(index);
 			if (bit.first == 0 || bit.first == 1) {
 				return index;
 			}
@@ -139,7 +132,7 @@ public:
 
 		std::pair<int, int> startBit;
 
-		startBit = BitRead(index);
+		startBit = DecodeByteEncodedBit(index);
 
 		// if not a 0 (start) bit, let caller know
 		if (startBit.first != 0) {
@@ -153,7 +146,7 @@ public:
 		int bitIndex;
 		// in theory, we have a stop bit, now get 8 data bits
 		for(bitIndex = 0; bitIndex < 8; bitIndex++) {
-			auto dataBit = BitRead(index);
+			auto dataBit = DecodeByteEncodedBit(index);
 
 			if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(dataBit.first) << std::dec << " data bit #" << bitIndex << std::endl;
 
@@ -170,27 +163,19 @@ public:
 
 		// now check for two stop bits
 
-		auto firstStopBit = BitRead(index);
+		for(auto i = 0; i < 2; i++) {
+			auto firstStopBit = DecodeByteEncodedBit(index);
 
-		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(firstStopBit.first) << std::dec << " first stop bit" << std::endl;
+			if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(firstStopBit.first) << std::dec << " first stop bit" << std::endl;
 
-		// if we do not have a first stop bit (valid bit and value 0), then move ahead a bit and repeat
-		// attempting to read a byte
-		if (firstStopBit.first != 1) {
-			return std::make_pair(256, index);
+			// if we do not have a first stop bit (valid bit and value 0), then move ahead a bit and repeat
+			// attempting to read a byte
+			if (firstStopBit.first != 1) {
+				return std::make_pair(256, index);
+			}
+
+			index = firstStopBit.second;
 		}
-
-		index = firstStopBit.second;
-
-		auto secondStopBit = BitRead(index);
-
-		if (debug) std::cout << index << ", " << audio.TimeOffset(index) << "s: " << std::hex << static_cast<uint16_t>(secondStopBit.first) << std::dec << " second stop bit" << std::endl;
-
-		if (secondStopBit.first != 1) {
-			return std::make_pair(256, index);
-		}
-
-		index = secondStopBit.second;
 
 		return std::make_pair(resultByte, index);
 	}
@@ -279,7 +264,7 @@ int main(int argc, char **argv) {
 	}
 
 	Audio audio(argv[optind]);
-	PolyAudioTapeDecoder decoder(DecodeByteEncodedBit, audio);
+	PolyAudioTapeDecoder decoder(audio);
 	decoder.SetDebug(debug);
 	decoder.SetSyncedReadIndex(0);
 
