@@ -47,3 +47,5 @@ add_custom_target(
 	COMMAND make clean
 	COMMAND rm -rf CMakeCache.txt CMakeFiles Makefile cmake_install.cmake
 )
+
+add_executable(tape_biphase tape_biphase.cpp audio.cpp)
