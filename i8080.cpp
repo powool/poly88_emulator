@@ -57,7 +57,7 @@ I8080::I8080()
 
 I8080::~I8080()
 {
-	std::cerr << "Shutting down the 8080 emulator." << std::endl;
+//	std::cerr << "Shutting down the 8080 emulator." << std::endl;
 }
 
 void I8080::DumpState() const
