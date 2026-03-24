@@ -136,12 +136,26 @@ public:
 	}
 
 	// This detects a negative to positive transition
-	int FindThisOrNextZeroCrossing(int index, int bitRate) {
+	int FindThisOrNextZeroCrossing(int index, int bitRate, int hysterisis = 0) {
 		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
 
 		// skip to next negative to positive signal transition
 		while (index < lastIndex) {
-			if (Negative(index) && !Negative(index + 1)) {
+			if (Value(index) - hysterisis < 0 && Value(index + 1) - hysterisis >= 0) {
+				break;
+			}
+			index++;
+		}
+		return index;
+	}
+
+	// This detects a positive to negative transition
+	int FindThisOrNextNegativeZeroCrossing(int index, int bitRate, int hysterisis = 0) {
+		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
+
+		// skip to next negative to positive signal transition
+		while (index < lastIndex) {
+			if (Value(index) + hysterisis >= 0 && Value(index + 1) + hysterisis < 0) {
 				break;
 			}
 			index++;
@@ -150,16 +164,16 @@ public:
 	}
 
 	// This detects a negative to positive transition
-	int FindNearestZeroCrossing(int index, int bitRate) {
+	int FindNearestZeroCrossing(int index, int bitRate, int hysterisis = 0) {
 		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
 		
 		// find nearest negative to positive signal transition
 		for (int distance = 0; distance < SamplesPerBit(bitRate); distance++) {
-			if (Negative(index + distance) && !Negative(index + distance + 1)) {
+			if (Value(index + distance) - hysterisis < 0 && Value(index + distance + 1) - hysterisis >= 0) {
 				index += distance;
 				break;
 			}
-			if (Negative(index - distance) && !Negative(index - distance + 1)) {
+			if (Value(index - distance) - hysterisis < 0 && Value(index - distance + 1) - hysterisis >= 0) {
 				index -= distance;
 				break;
 			}
@@ -169,12 +183,12 @@ public:
 	}
 
 	// This detects any transition, with any polarity
-	int FindThisOrNextZeroCrossingAnyPolarity(int index, int bitRate) {
-		auto lastIndex = SampleCount() - 2 * SamplesPerBit(bitRate);
-
-		// skip to next negative to positive signal transition
-		while (index < lastIndex) {
-			if (Negative(index) && !Negative(index + 1) || !Negative(index) && Negative(index +1)) {
+	int FindThisOrNextTransition(int index, int hysterisis = 0) {
+		// Skip to next negative to positive signal transition.
+		// Caller needs to verify if this is a local transition or not
+		while (index < SampleCount()) {
+			if ((Value(index) - hysterisis < 0 && Value(index + 1) - hysterisis >= 0) ||
+					(Value(index) + hysterisis >=0 && Value(index + 1) + hysterisis < 0)) {
 				break;
 			}
 			index++;
@@ -399,19 +413,31 @@ public:
 		syncedIndex = SyncToValidBit(syncedIndex);
 	}
 
-	std::pair<int, int> ByteReadUnsyncedPolyPhase(int bitCellStartIndex) {
-#if 1
+	// See http://www.kazojc.com/elementy_czynne/IC/8T20.pdf
+	//
+	std::pair<int, int> BitReadUnsyncedPolyPhase(int bitCellStartIndex) {
 		const int bitRate = 4800;
 		int samplesPerBit = audio.SamplesPerBit(bitRate);
-		const int hysterisis = 10;	// WAG
+		// Hysterisis out of +/- 32767 - pdf says we want +/- 4mv hysterisis
+		// According to https://en.wikipedia.org/wiki/Line_level, 0dB for
+		// line level input is 1.095v.
+		const int hysterisis = .004 * (32767/1.095);
 		int oneShotTriggerIndex = bitCellStartIndex + .75 * samplesPerBit;
 
-#else
-		// ensure we're at a transition XXX NO, WE DON'T unless there is no transition
-		index = audio.FindThisOrNextZeroCrossingAnyPolarity(index, bitRate);
+		// ensure we're at the start of a transition
 
-		polyPhaseClockIndex = index;
-#endif
+		auto fallingEdgeIndex = audio.FindThisOrNextTransition(bitCellStartIndex + 1, hysterisis);
+
+		// Here, due to the encoding, we guarantee that the following transition will
+		// be the beginning of a bit cell.
+		bitCellStartIndex = audio.FindThisOrNextTransition(oneShotTriggerIndex, hysterisis);
+
+		int resultingBit = audio.Value(oneShotTriggerIndex) > 0;
+
+		return std::make_pair(resultingBit, bitCellStartIndex);
+	}
+
+	std::pair<int, int> ByteReadUnsyncedPolyPhase(int bitCellStartIndex) {
 		return std::make_pair(0, 0);
 	}
 
