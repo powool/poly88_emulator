@@ -74,6 +74,7 @@ bool Poly88::RunEmulatorCommand(const std::vector<std::string> &args)
 
 	usartControl->RunEmulatorCommand(args);
 	I8080::RunEmulatorCommand(args);
+	keyboard->RunEmulatorCommand(args);
 	return false;
 }
 
