@@ -106,6 +106,10 @@ class PolyMorphics88 : public EmulatorInterface {
 		return poly88.PC();
 	}
 
+	std::string Disassemble(uint16_t pc) {
+		return poly88.Disassemble(pc);
+	}
+
 	void KeyPress(uint8_t ch) override {
 		poly88.KeyPress(ch);
 	}
