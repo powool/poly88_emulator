@@ -35,6 +35,7 @@
 #include <QWidget>
 
 #include "audio.h"
+#include "PolyAudioTapeDecoder.hpp"
 
 // Wave file handler
 // bit finder
@@ -531,6 +532,10 @@ private slots:
 	}
 
 	void ScanForRecord(TapeIndex idx) {
+		PolyAudioTapeDecoder decoder(audio);
+		decoder.SetIndex(idx);
+		decoder.SetBitRate(4800);
+		decoder.ReadRecord();
 	}
 
 	void onContextData(TapeIndex idx) {

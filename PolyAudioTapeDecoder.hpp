@@ -39,10 +39,10 @@ class PolyAudioTapeDecoder {
 	int bitRate;	// bit per second
 
 	bool byteSync;
-	Audio &audio;
+	AudioPtr audio;
 
 public:
-	PolyAudioTapeDecoder(Audio &_audio) : audio(_audio) {
+	PolyAudioTapeDecoder(AudioPtr audio) : audio(audio) {
 		debug = false;
 		bitCellStartIndex = 0;
 		SetBitRate(2400);
@@ -51,7 +51,7 @@ public:
 
 	void SetDebug(int debug) { this->debug = debug; }
 	void SetIndex(int bitCellStartIndex) { this->bitCellStartIndex = bitCellStartIndex; }
-	void SetBitRate(int bitRate) { this->bitRate = bitRate; samplesPerBit = audio.SamplesPerBit(bitRate);}
+	void SetBitRate(int bitRate) { this->bitRate = bitRate; samplesPerBit = audio->SamplesPerBit(bitRate);}
 
 	// See http://www.kazojc.com/elementy_czynne/IC/8T20.pdf
 	//
@@ -62,7 +62,7 @@ public:
 	int ReadBit() {
 		int oneShotTriggerIndex = bitCellStartIndex + .75 * samplesPerBit;
 
-		int resultingBit = audio.Value(oneShotTriggerIndex) > 0;
+		int resultingBit = audio->Value(oneShotTriggerIndex) > 0;
 
 		// see if we can re-sync exactly
 		if (lastBit == 1 && resultingBit == 0) {
@@ -70,7 +70,7 @@ public:
 			//
 			// Here, due to the encoding, we guarantee that the following transition will
 			// be the beginning of a bit cell. Find it and reset our cell index to that transition.
-			bitCellStartIndex = audio.FindThisOrNextTransition(oneShotTriggerIndex, hysterisis);
+			bitCellStartIndex = audio->FindThisOrNextTransition(oneShotTriggerIndex, hysterisis);
 		} else {
 			// open loop clocking
 			bitCellStartIndex += samplesPerBit;
@@ -126,16 +126,16 @@ public:
 		while(byte == TapeHeader::SYNC) {
 			if (debug) {
 #if 0
-				audio.Dump(std::cerr, debugByteStartIndex, samplesPerBit * 9);
+				audio->Dump(std::cerr, debugByteStartIndex, samplesPerBit * 9);
 #endif
-				std::cerr << savedIndex << "/" << (bitCellStartIndex - savedIndex) << ", " << audio.TimeOffset(savedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << std::endl;
+				std::cerr << savedIndex << "/" << (bitCellStartIndex - savedIndex) << ", " << audio->TimeOffset(savedIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << std::endl;
 			}
 			else std::cout << byte;
 			byte = ReadByte();
 		}
 
 		if(byte != TapeHeader::SOH) {
-			std::cerr << bitCellStartIndex << ", " << audio.TimeOffset(bitCellStartIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << " expected SOH = 0x01" << std::endl;
+			std::cerr << bitCellStartIndex << ", " << audio->TimeOffset(bitCellStartIndex) << "s: " << std::hex << static_cast<uint16_t>(byte) << std::dec << " expected SOH = 0x01" << std::endl;
 			return;
 		}
 
@@ -199,7 +199,7 @@ public:
 	}
 
 	void ReadTape() {
-		while(bitCellStartIndex < audio.SampleCount()) {
+		while(bitCellStartIndex < audio->SampleCount()) {
 			ReadRecord();
 		}
 	}
