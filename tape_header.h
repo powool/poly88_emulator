@@ -28,16 +28,16 @@ public:
 		return computedChecksum;
 	}
 	void Dump() {
-		std::cout << "name: ";
+		std::cerr << "name: ";
 		for(auto i = 0; i < sizeof(name) ; i++) {
 			std::cout << name[i];
 		}
-		std::cout << " record #" << recordNumber;
-		std::cout << " record length: " << static_cast<uint16_t>(dataLength);
-		std::cout << " record address: " << std::hex << recordAddress << std::dec;
-		std::cout << " record type: " << std::hex << static_cast<uint16_t>(type) << std::dec;
-		std::cout << " computed checksum: " << static_cast<uint16_t> (ComputeChecksum());
-		std::cout << std::endl;
+		std::cerr << " record #" << recordNumber;
+		std::cerr << " record length: " << static_cast<uint16_t>(dataLength);
+		std::cerr << " record address: " << std::hex << recordAddress << std::dec;
+		std::cerr << " record type: " << std::hex << static_cast<uint16_t>(type) << std::dec;
+		std::cerr << " computed checksum: " << static_cast<uint16_t> (ComputeChecksum());
+		std::cerr << std::endl;
 	}
 };
 
