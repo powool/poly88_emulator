@@ -35,6 +35,13 @@ qt_add_executable(${PROJECT_NAME}
 # Link it all up
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Widgets)
 
+qt_add_executable(PolyWaveToImage
+	PolyWaveToImage.cpp
+	audio.cpp
+)
+
+target_link_libraries(PolyWaveToImage PRIVATE Qt6::Widgets Qt6::Gui)
+
 add_custom_target(
 	cleanall
 	COMMAND make clean
