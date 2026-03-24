@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +16,10 @@ struct MediaEntry {
 };
 
 class MediaQueue {
+	std::mutex selectionMutex;
+	std::filesystem::path selectedMedia;
+	std::condition_variable selectionCondition;
+
 	std::mutex mutex;
 	std::vector<MediaEntry> entries;
 	static constexpr const char *MEDIA_LIST_FILE = ".poly88_media_files";
@@ -30,11 +35,32 @@ public:
 		mediaWanted = true;
 	}
 
+	// modify so UI can signal a condition variable here
+	void WaitForSelection() {
+		std::unique_lock lock(selectionMutex);
+		selectionCondition.wait(lock, [] { return true; });
+		return;
+	}
+
+	void MediaWasSelected() {
+		selectionCondition.notify_one();
+	}
+
 	bool MediaWanted() {
 		// once we've notified the UI, just reset our flag
 		bool result = mediaWanted;
 		mediaWanted = false;
 		return result;
+	}
+
+	std::filesystem::path ReturnSelectedMedia() {
+		if (!selectedMedia.empty()) {
+			return selectedMedia;
+		}
+		if (entries.size() && currentMediaIndex > -1) {
+			return entries[currentMediaIndex].path;
+		}
+		return "NO FILE CHOSEN";
 	}
 
 	void LoadFromFile() {
