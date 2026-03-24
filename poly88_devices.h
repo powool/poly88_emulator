@@ -22,6 +22,7 @@ public:
 	void Write(uint8_t data) override;
 	bool Poll();
 	bool RunEmulatorCommand(const std::vector<std::string> &args);
+	void Insert(uint8_t data);
 };
 
 class Timer : public Device
