@@ -185,34 +185,6 @@ public:
 		syncedIndex = SyncToValidBit(syncedIndex);
 	}
 
-	// See http://www.kazojc.com/elementy_czynne/IC/8T20.pdf
-	//
-	std::pair<int, int> BitReadUnsyncedPolyPhase(int bitCellStartIndex) {
-		const int bitRate = 4800;
-		int samplesPerBit = audio.SamplesPerBit(bitRate);
-		// Hysterisis out of +/- 32767 - pdf says we want +/- 4mv hysterisis
-		// According to https://en.wikipedia.org/wiki/Line_level, 0dB for
-		// line level input is 1.095v.
-		const int hysterisis = .004 * (32767/1.095);
-		int oneShotTriggerIndex = bitCellStartIndex + .75 * samplesPerBit;
-
-		// ensure we're at the start of a transition
-
-		auto fallingEdgeIndex = audio.FindThisOrNextTransition(bitCellStartIndex + 1, hysterisis);
-
-		// Here, due to the encoding, we guarantee that the following transition will
-		// be the beginning of a bit cell.
-		bitCellStartIndex = audio.FindThisOrNextTransition(oneShotTriggerIndex, hysterisis);
-
-		int resultingBit = audio.Value(oneShotTriggerIndex) > 0;
-
-		return std::make_pair(resultingBit, bitCellStartIndex);
-	}
-
-	std::pair<int, int> ByteReadUnsyncedPolyPhase(int bitCellStartIndex) {
-		return std::make_pair(0, 0);
-	}
-
 	uint8_t ByteReadSynced() {
 		std::pair<int, int> byte;
 		while(true) {
