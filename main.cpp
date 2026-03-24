@@ -23,6 +23,13 @@
 #include <QUrl>
 
 #include <QFileDialog>
+#include <QPlainTextEdit>
+#include <QTextCursor>
+#include <QFontDialog>
+#include <QSpinBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 
 #include "PolyMorphics88.hpp"
 #include "Poly88VdiFont.h"
@@ -84,6 +91,15 @@ class MainWindow : public QMainWindow
 	QLabel *spLabel  = nullptr;
 	QSlider *speedSlider = nullptr;
 
+	// Trace output
+	QPlainTextEdit *traceOutput = nullptr;
+	QPushButton *traceButton = nullptr;
+	bool traceEnabled = false;
+
+	// Preferences
+	int maxTraceRows = 1000;
+	QFont uiFont = QFont("Monospace", 9);
+
     public:
 	MainWindow(QWidget* parent = nullptr) : QMainWindow(parent) {
 		this->setWindowTitle("Poly-88 Emulator");
@@ -102,6 +118,9 @@ class MainWindow : public QMainWindow
 
 		resetAction = fileMenu->addAction("Reset");
 		connect(resetAction, &QAction::triggered, this, &MainWindow::ResetEmulator);
+
+		auto *prefsAction = fileMenu->addAction("Preferences...");
+		connect(prefsAction, &QAction::triggered, this, &MainWindow::ShowPreferences);
 
 		fileMenu->addSeparator();
 
@@ -154,6 +173,14 @@ class MainWindow : public QMainWindow
 		connect(singleStepButton, &QPushButton::clicked, this, &MainWindow::SingleStep);
 		row1->addWidget(singleStepButton);
 
+		traceButton = new QPushButton("Trace");
+		traceButton->setCheckable(true);
+		connect(traceButton, &QPushButton::toggled, this, [this](bool checked) {
+			traceEnabled = checked;
+			traceButton->setText(checked ? "Trace On" : "Trace");
+		});
+		row1->addWidget(traceButton);
+
 		interruptLabel = new QLabel("Interrupts Enabled");
 		interruptLabel->setFrameShape(QFrame::Box);
 		interruptLabel->setLineWidth(1);
@@ -204,13 +231,20 @@ class MainWindow : public QMainWindow
 		hlLabel->setFont(QFont("Monospace", 9));
 		mainLayout->addWidget(hlLabel);
 
+		spLabel = new QLabel();
+		spLabel->setFont(QFont("Monospace", 9));
+		mainLayout->addWidget(spLabel);
+
 		pcLabel = new QLabel();
 		pcLabel->setFont(QFont("Monospace", 9));
 		mainLayout->addWidget(pcLabel);
 
-		spLabel = new QLabel();
-		spLabel->setFont(QFont("Monospace", 9));
-		mainLayout->addWidget(spLabel);
+		// Trace output (scrollable, monospace, grows vertically)
+		traceOutput = new QPlainTextEdit();
+		traceOutput->setReadOnly(true);
+		traceOutput->setFont(uiFont);
+		traceOutput->setLineWrapMode(QPlainTextEdit::NoWrap);
+		mainLayout->addWidget(traceOutput, 1);
 
 		centralFrame->setLayout(mainLayout);
 		this->setCentralWidget(centralFrame);
@@ -274,8 +308,8 @@ class MainWindow : public QMainWindow
 		bcLabel->setText(QString::fromStdString(formatRegMemRow("BC", emulator->BC(), emulator)));
 		deLabel->setText(QString::fromStdString(formatRegMemRow("DE", emulator->DE(), emulator)));
 		hlLabel->setText(QString::fromStdString(formatRegMemRow("HL", emulator->HL(), emulator)));
-		pcLabel->setText(QString::fromStdString(formatRegMemRow("PC", emulator->PC(), emulator)));
 		spLabel->setText(QString::fromStdString(formatRegMemRow("SP", emulator->SP(), emulator)));
+		pcLabel->setText(QString::fromStdString(formatRegMemRow("PC", emulator->PC(), emulator)));
 
 		// Update VDI scene
 		polyVdi->UpdateScene(emulator);
@@ -286,8 +320,23 @@ class MainWindow : public QMainWindow
 		UpdateUI();
 	}
 
+	void AppendTrace() {
+		QString line = QString::fromStdString(emulator->Disassemble(emulator->PC()));
+		traceOutput->appendPlainText(line);
+		// Enforce max rows
+		if (traceOutput->document()->blockCount() > maxTraceRows) {
+			QTextCursor cursor = traceOutput->textCursor();
+			cursor.movePosition(QTextCursor::Start);
+			cursor.movePosition(QTextCursor::Down, QTextCursor::KeepAnchor,
+				traceOutput->document()->blockCount() - maxTraceRows);
+			cursor.removeSelectedText();
+			cursor.deleteChar(); // remove leftover newline
+		}
+	}
+
 	void SingleStep() {
 		if (!emulator->Running()) {
+			AppendTrace();
 			emulator->RunOneInstruction();
 			UpdateUI();
 		}
@@ -297,6 +346,59 @@ class MainWindow : public QMainWindow
 		if (!emulator->Running()) {
 			emulator->Reset();
 			UpdateUI();
+		}
+	}
+
+	void ApplyFont() {
+		// Apply uiFont to all relevant widgets
+		QFont mono = uiFont;
+		aLabel->setFont(mono);
+		mLabel->setFont(mono);
+		pswLabel->setFont(mono);
+		bcLabel->setFont(mono);
+		deLabel->setFont(mono);
+		hlLabel->setFont(mono);
+		spLabel->setFont(mono);
+		pcLabel->setFont(mono);
+		traceOutput->setFont(mono);
+		menuBar()->setFont(mono);
+	}
+
+	void ShowPreferences() {
+		QDialog dlg(this);
+		dlg.setWindowTitle("Preferences");
+		auto *form = new QFormLayout(&dlg);
+
+		// Max trace rows
+		auto *rowsSpin = new QSpinBox();
+		rowsSpin->setRange(100, 1000000);
+		rowsSpin->setValue(maxTraceRows);
+		form->addRow("Max trace rows:", rowsSpin);
+
+		// Font picker
+		auto *fontButton = new QPushButton(
+			QString("%1, %2pt").arg(uiFont.family()).arg(uiFont.pointSize()));
+		QFont chosenFont = uiFont;
+		connect(fontButton, &QPushButton::clicked, &dlg, [&]() {
+			bool ok;
+			QFont f = QFontDialog::getFont(&ok, chosenFont, &dlg, "Select UI Font");
+			if (ok) {
+				chosenFont = f;
+				fontButton->setText(QString("%1, %2pt").arg(f.family()).arg(f.pointSize()));
+			}
+		});
+		form->addRow("UI Font:", fontButton);
+
+		auto *buttons = new QDialogButtonBox(
+			QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+		connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+		connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+		form->addRow(buttons);
+
+		if (dlg.exec() == QDialog::Accepted) {
+			maxTraceRows = rowsSpin->value();
+			uiFont = chosenFont;
+			ApplyFont();
 		}
 	}
 
