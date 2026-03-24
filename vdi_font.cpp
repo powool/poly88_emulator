@@ -1,5 +1,5 @@
 
-#include "xpm.h"
+#include "XpmWrapper.hpp"
 #include "vdi_font.h"
 
 //
@@ -4437,53 +4437,38 @@ static const char * CHR_FF[] =
     ".........."
 };
 
+void Cvdi_font::setCharFromCStyleXPM(uint32_t index, const char **cStyleXPM)
+{
+	auto surface = IMG_ReadXPMFromArray(const_cast<char **>(cStyleXPM));
+
+	textures[index] = SDL_CreateTextureFromSurface(renderer, surface);
+
+	if(textures[index] == NULL)
+	{
+		throw std::runtime_error(std::string("failed to open create texture: ") + SDL_GetError());
+	}
+}
 
 void Cvdi_font::setSurface(uint32_t index, const char **xpm)
 {
-    if(xpm==NULL)
-    {
-        textures[index] = NULL;
-    }
-    else
-    {
-#define USE_SCALED
-#if defined(USE_SCALED)
 	// the purpose of this scaling is twofold:
 	// 1) for readability on high resolution displays
 	// 2) to simulate the gap between characters that
-	//    we had on the old video monitor
-        XPM lxpm(xpm);
-        XPM *scaledXPM = lxpm.CreateNew(1,2,2);
-        char **scaled = scaledXPM->GetXPM();
+	//    we had on the old 240 scan row video monitor
+	XpmWrapper lxpm(xpm);	// XXX convert C style to class
 
-        auto surface = IMG_ReadXPMFromArray(scaled);
+	XpmWrapper scaledXpm(lxpm, gap, widthScale, heightScale);
+	const char **scaled = scaledXpm.GetXpmData();	// convert class to C style
 
-        textures[index] = SDL_CreateTextureFromSurface(renderer, surface);
-		if(textures[index] == NULL)
-		{
-			throw std::runtime_error(std::string("failed to open create texture: ") + SDL_GetError());
-		}
-        SDL_FreeSurface(surface);
-        //
-        // free scaled xpm:
-        //
-        for(int i=0; scaled[i] ; i++) free(scaled[i]);
-        free(scaled);
-        delete scaledXPM;
-#else
-        auto surface = IMG_ReadXPMFromArray((char **) xpm);
-        textures[index] = SDL_CreateTextureFromSurface(renderer, surface);
-        SDL_FreeSurface(surface);
-#endif
-        SDL_QueryTexture(textures[index], NULL, NULL, &_width, &_height);
-    }
+	setCharFromCStyleXPM(index, scaled);
+
+	SDL_QueryTexture(textures[index], NULL, NULL, &_width, &_height);
 }
 
 Cvdi_font::Cvdi_font(SDL_Renderer *_renderer) : renderer(_renderer)
 {
-    for(uint32_t i = 0 ; i<256; i++)
-    {
-        setSurface(i, NULL);
+    for(uint32_t i = 0 ; i<256; i++) {
+        textures[i] = NULL;
     }
     setSurface(0x00, CHR_00);
     setSurface(0x01, CHR_01);
@@ -4757,4 +4742,13 @@ Cvdi_font::Cvdi_font(SDL_Renderer *_renderer) : renderer(_renderer)
     setSurface(0xfe, CHR_FE);
     setSurface(0xff, CHR_FF);
 
+}
+
+std::pair<int, int> Cvdi_font::GetDimensions()
+{
+	XpmWrapper xpm(CHR_00);
+
+	XpmWrapper scaledXpm(xpm, Cvdi_font::gap, Cvdi_font::widthScale, Cvdi_font::heightScale);
+
+	return std::pair<int, int>(scaledXpm.GetWidth(), scaledXpm.GetHeight());
 }
