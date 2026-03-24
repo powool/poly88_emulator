@@ -94,23 +94,43 @@ class PolyMorphics88 : public EmulatorInterface {
 		return poly88.BC();
 	}
 
+	uint16_t BC(uint16_t bc) override {
+		return poly88.BC(bc);
+	}
+
 	uint16_t DE() const override {
 		return poly88.DE();
+	}
+
+	uint16_t DE(uint16_t de) override {
+		return poly88.DE(de);
 	}
 
 	uint16_t HL() const override {
 		return poly88.HL();
 	}
 
+	uint16_t HL(uint16_t hl) override {
+		return poly88.HL(hl);
+	}
+
 	uint16_t SP() const override {
 		return poly88.SP();
+	}
+
+	uint16_t SP(uint16_t sp) override {
+		return poly88.SP(sp);
 	}
 
 	uint16_t PC() const override {
 		return poly88.PC();
 	}
 
-	std::string Disassemble(uint16_t pc) {
+	uint16_t PC(uint16_t pc) override {
+		return poly88.PC(pc);
+	}
+
+	std::string Disassemble(uint16_t pc) override {
 		return poly88.Disassemble(pc);
 	}
 
