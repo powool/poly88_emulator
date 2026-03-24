@@ -29,8 +29,6 @@ poly88_devices.cpp	poly 88 specific i/o devices (keyboard, timer -
 poly88_devices.h	definitions of functions in poly88_devices.cc
 
 To build:
-	cmake -DCMAKE_BUILD_TYPE=Debug
-	make
 
 To run:
     from this directory, type:
