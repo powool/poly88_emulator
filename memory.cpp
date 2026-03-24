@@ -159,8 +159,3 @@ i8080_addr_t Memory::get_2byte(i8080_addr_t a) const
 	if(a >= guardLow && a < guardHigh) return 0xffff;
     return (ram[a+1]<<8) + ram[a];
 }
-
-void Memory::redraw_screen()
-{
-    return;
-}
