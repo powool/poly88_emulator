@@ -1,5 +1,9 @@
 project(poly88)
 
+cmake_minimum_required(VERSION 3.5)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 #
 # apt-get install libsdl2-dev
 # apt-get install libsdl2-image-dev
