@@ -7,8 +7,8 @@ microcomputer, circa 1976.  I wrote it for my amusement, in the late
 taking a step towards preserving my experience with a Poly-88, from which
 I learned just about everything important about computing.
 
-Paul Anderson
-pha@umich.edu
+Powool
+powool@gmail.com
 
 ---------------------------
 contents:
