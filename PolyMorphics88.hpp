@@ -23,11 +23,11 @@ class PolyMorphics88 : public EmulatorInterface {
 		}
 	}
     public:
-	PolyMorphics88(std::shared_ptr<FileDialogBridge> fileDialogBridge) :
+	PolyMorphics88(std::shared_ptr<FileDialogBridge> fileDialogBridge,
+			MemoryInterfacePtr memory) :
 		fileDialogBridge(fileDialogBridge),
-		poly88(fileDialogBridge)
+		poly88(fileDialogBridge, memory)
 	{
-		poly88.memory.LoadROM("POLY-88-EPROM");
 		poly88.Reset();
 		poly88.InterruptEnable(false);
 		executionThread = std::thread(&PolyMorphics88::ExecutionThread, this);
@@ -39,15 +39,15 @@ class PolyMorphics88 : public EmulatorInterface {
 	}
 
 	uint8_t GetMemoryByte(uint16_t address) const override {
-		return poly88.memory.get_byte(address);
+		return poly88.ReadByte(address);
 	}
 
 	uint16_t GetMemoryInt(uint16_t address) const override {
-		return poly88.memory.get_byte(address) | (poly88.memory.get_byte(address+1) << 8);
+		return poly88.ReadByte(address) | (poly88.ReadByte(address+1) << 8);
 	}
 
 	void PutMemoryByte(uint16_t address, uint8_t byte) {
-		poly88.memory.set_byte(address, byte);
+		poly88.WriteByte(address, byte);
 	}
 
 	void RunOneInstruction() override {
@@ -142,4 +142,3 @@ class PolyMorphics88 : public EmulatorInterface {
 	void ToggleRunning() override { running = !running; }
 	void SetCPUSpeed(int hz) override { /* not implemented */ }
 };
-

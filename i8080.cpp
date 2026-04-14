@@ -31,7 +31,8 @@ static int sub_half_carry_table[] = { 1, 0, 0, 0, 1, 1, 1, 0 };
 // AB || !C (B || A)
 // Too messy, I can see why they did a table lookup.
 
-I8080::I8080()
+I8080::I8080(MemoryInterfacePtr memory) :
+	memory(memory)
 {
 	int i,j;
 	int ringsum, val;
@@ -79,16 +80,16 @@ int I8080::ExecuteCycle(Devices *dev)
 #define INVALID() { ; }
 
 #define PUSH(val) \
-	{SP(SP()-2); memory.set_2byte(SP(),val);}
+	{SP(SP()-2); Write2Byte(SP(),val);}
 
 #define POP() \
-	(SP(SP()+2), memory.get_2byte(SP()-2))
+	(SP(SP()+2), Read2Byte(SP()-2))
 
 #define IMMEDIATE_BYTE() \
-	(memory.get_byte(PC()+1))
+	(ReadByte(PC()+1))
 
 #define IMMEDIATE_2BYTE() \
-	(memory.get_2byte(PC()+1))
+	(Read2Byte(PC()+1))
 
 
 #define SET_ZERO_SIGN_PARITY(value) \
@@ -216,7 +217,7 @@ int I8080::ExecuteCycle(Devices *dev)
 
 #define STAX_R(opcode, rp) \
 		case opcode:    /* STAX D */ \
-			memory.set_byte(rp(), A()); \
+			WriteByte(rp(), A()); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -258,7 +259,7 @@ int I8080::ExecuteCycle(Devices *dev)
 
 #define LDAX_R(opcode, r) \
 		case opcode:    /* LDAX r */ \
-			A(memory.get_byte(r())); \
+			A(ReadByte(r())); \
 			PC(PC() + 1); \
 			return 0;
 
@@ -278,7 +279,7 @@ int I8080::ExecuteCycle(Devices *dev)
 	RunTraces();
 
 	// decode instruction and execute it
-	switch(memory.get_byte(PC()))
+	switch(ReadByte(PC()))
 	{
 
 		case 0x00:  /* NOP */
@@ -354,7 +355,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			LXI_R(0x21, HL);
 
 		case 0x22:  /* SHLD */
-			memory.set_2byte(IMMEDIATE_2BYTE(),HL());
+			Write2Byte(IMMEDIATE_2BYTE(),HL());
 			PC(PC() + 3);
 			return 0;
 
@@ -396,7 +397,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			DAD_R(0x29, HL);
 
 		case 0x2a:  /* LHLD */
-			HL(memory.get_2byte(IMMEDIATE_2BYTE()));
+			HL(Read2Byte(IMMEDIATE_2BYTE()));
 			PC(PC() + 3);
 			return 0;
 
@@ -413,7 +414,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			LXI_R(0x31, SP);
 
 		case 0x32:  /* STA xxxx */
-			memory.set_byte(IMMEDIATE_2BYTE(), A());
+			WriteByte(IMMEDIATE_2BYTE(), A());
 			PC(PC() + 3);
 			return 0;
 
@@ -430,7 +431,7 @@ int I8080::ExecuteCycle(Devices *dev)
 			DAD_R(0x39, SP);
 
 		case 0x3a:  /* LDA xxxx */
-			A(memory.get_2byte(IMMEDIATE_2BYTE()));
+			A(Read2Byte(IMMEDIATE_2BYTE()));
 			PC(PC() + 3);
 			return 0;
 
@@ -1088,27 +1089,27 @@ std::string I8080::Disassemble(uint16_t pc)
 	outputLine << util::hex(4) << pc << "   ";
 
 	unsigned char instruction[8];
-	instruction[0] = memory.get_byte(pc);
-	instruction[1] = memory.get_byte(pc+1);
-	instruction[2] = memory.get_byte(pc+2);
-	instruction[3] = memory.get_byte(pc+3);
-	instruction[4] = memory.get_byte(pc+4);
-	instruction[5] = memory.get_byte(pc+5);
-	instruction[6] = memory.get_byte(pc+6);
-	instruction[7] = memory.get_byte(pc+7);
+	instruction[0] = ReadByte(pc);
+	instruction[1] = ReadByte(pc+1);
+	instruction[2] = ReadByte(pc+2);
+	instruction[3] = ReadByte(pc+3);
+	instruction[4] = ReadByte(pc+4);
+	instruction[5] = ReadByte(pc+5);
+	instruction[6] = ReadByte(pc+6);
+	instruction[7] = ReadByte(pc+7);
 
 	const unsigned char *in = instruction;
 	char args[64];
 
 	auto z80_instruction_size = z80_disassemble_size(in);
 
-	outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(pc)) << " ";
+	outputLine << util::hex(2) << static_cast<uint16_t>(ReadByte(pc)) << " ";
 	if(z80_instruction_size>1)
-		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(pc+1)) << " ";
+		outputLine << util::hex(2) << static_cast<uint16_t>(ReadByte(pc+1)) << " ";
 	else
 		outputLine << "   ";
 	if(z80_instruction_size>2)
-		outputLine << util::hex(2) << static_cast<uint16_t>(memory.get_byte(pc+2)) << " " ;
+		outputLine << util::hex(2) << static_cast<uint16_t>(ReadByte(pc+2)) << " " ;
 	else
 		outputLine << "   ";
 
@@ -1129,7 +1130,7 @@ std::string I8080::Flags()
 {
 	std::stringstream outputLine;
 
-	auto tos = memory.get_2byte(SP());
+	auto tos = Read2Byte(SP());
 	outputLine << "a:" << util::hex(2) << static_cast<uint16_t>(A()) << " bc=" << util::hex(4) << BC() << " de=" << util::hex(4) << DE() << " hl=" << util::hex(4) << HL() << " m=" << util::hex(2) << static_cast<uint16_t>(M()) << " sp=" << util::hex(4) << SP() << " *sp=" << tos << "\tpsw=";
 	if(_PSW.zero) outputLine << "Z,";
 	else outputLine << "NZ,";
@@ -1146,14 +1147,14 @@ std::string I8080::Flags()
 int I8080::InstructionLength(uint16_t pc)
 {
 	unsigned char instruction[8];
-	instruction[0] = memory.get_byte(pc);
-	instruction[1] = memory.get_byte(pc+1);
-	instruction[2] = memory.get_byte(pc+2);
-	instruction[3] = memory.get_byte(pc+3);
-	instruction[4] = memory.get_byte(pc+4);
-	instruction[5] = memory.get_byte(pc+5);
-	instruction[6] = memory.get_byte(pc+6);
-	instruction[7] = memory.get_byte(pc+7);
+	instruction[0] = ReadByte(pc);
+	instruction[1] = ReadByte(pc+1);
+	instruction[2] = ReadByte(pc+2);
+	instruction[3] = ReadByte(pc+3);
+	instruction[4] = ReadByte(pc+4);
+	instruction[5] = ReadByte(pc+5);
+	instruction[6] = ReadByte(pc+6);
+	instruction[7] = ReadByte(pc+7);
 
 	const unsigned char *in = instruction;
 	char args[64];

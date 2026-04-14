@@ -24,7 +24,9 @@ static std::vector<std::string> GetArgv(const std::string& inputLine, char delim
 	return argv;
 }
 
-Poly88::Poly88(std::shared_ptr<FileDialogBridge> fileDialogBridge) :
+Poly88::Poly88(std::shared_ptr<FileDialogBridge> fileDialogBridge,
+		MemoryInterfacePtr memory) :
+	I8080(memory),
 	fileDialogBridge(fileDialogBridge)
 {
 	keyboard = std::make_shared<KeyBoard>(*this, devices);
