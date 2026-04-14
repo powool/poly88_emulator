@@ -22,7 +22,6 @@ qt_standard_project_setup()
 qt_add_executable(${PROJECT_NAME}
 	main.cpp
 	poly88.cpp
-	memory.cpp
 	devices.cpp
 	i8080.cpp
 	z80d.cpp
