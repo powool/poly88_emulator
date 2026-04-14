@@ -29,6 +29,7 @@ qt_add_executable(${PROJECT_NAME}
 	poly88_devices.cpp
 	Keyboard.cpp
 	TieredMemory.cpp
+	IntelHex.cpp
 )
 
 # Link it all up
