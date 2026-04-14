@@ -17,23 +17,17 @@ Contents:
 ~~~~~~~~
 README.md		this file
 CMakeLists.txt	CMakefile for this program
-POLY-88-EPROM	1K ROM monitor for poly-88
 devices.cpp	methods for handling generic, simple 8080 devices
 devices.h	class definition for generic devices
 i8080.cpp	methods for 8080 emulator class object
 i8080.h		class definition for 8080 emulator
-memory.cpp	methods for memory class, including poly-88 specific
-		memory mapped screen
-memory.h	class definition for memory
 poly88.cpp	main program for poly-88 specific emulator
-poly88_devices.cpp	poly 88 specific i/o devices (keyboard, timer -
-		will eventually have a tape interface)
+poly88_devices.cpp	poly 88 specific i/o devices (keyboard, timer - tape)
 poly88_devices.h	definitions of functions in poly88_devices.cc
 ~~~~~~~~
 
 Building:
 ---------
-	sudo apt-get install libsdl2-dev libsdl2-image-dev
 	cmake -DCMAKE_BUILD_TYPE=Debug
 	make
 
@@ -41,18 +35,25 @@ Running:
 --------
 
     from this directory, type:
-    ./poly88
+    ./Debug/poly88
 
-    It reads the EPROM from the file POLY-88-EPROM, then executes it.
+To use:
+    Initially, the emulator is not running. Start it by clicking the
+    "Stopped" button to start.
 
-	To use:
+    I usually hit caps lock to ensure all chacters are entered in
+    upper case, since almost all commands are expected to be
+    upper case.
 
     Comes up initially with a blank screen, waiting for a 'P' or a 'B'
     character to be typed for tape loading.
 
-	When you type 'P', the terminal window will ask for a filename, which
-	needs to be a Poly-88 cassette image file. On successful load, program
-	execution usually begins at hex address 2000.
+	When you type 'P', a file picking dialog box will open. It expected
+    to open a file with a .CAS suffix, which represents Poly-88
+    tape format binary files.
+
+    Many, but not all programs, will automatically start, usually
+    at address 2000H.
 
     To get to the poly-88 debugger, type ^Z, you are now in the front
     panel display:
@@ -86,7 +87,7 @@ FFF8    00 00 00 00 00 00 00 00
 
     To look at a memory location:
 
-	L0c80
+	L0C80
 	(follow with a non-hex char to move window to 0x0c80).
 
     To move forward one byte, type space.
@@ -94,40 +95,29 @@ FFF8    00 00 00 00 00 00 00 00
     To move backwards one byte, type backspace.
 
     To store a byte:
-	cd
+	CD   (or any other two hex digits)
 	(follow with a non-hex char, usually a space)
 
-    To store a double type (reverse endian):
-	j0c80
+    To store a 16 bit word (little endian):
+	J0C80
 	(follow with a non-hex char, usually a space)
 
     To set a register:
-	sa	points to stack frame storage for AF
-	sb	point to BC
-	sd	point to DE
-	sh	point to HL
-	sp	point to PC
+	SA	points to stack frame storage for AF
+	SB	point to BC
+	SD	point to DE
+	SH	point to HL
+	SP	point to PC
 
-    To resume execution at current PC, type g.
-
-    To terminate emulator program, type ^A.
+    To resume execution at current PC, type G.
 
     To enter and run a program that reads and writes characters from the
     keyboard to the screen, do the following:
 
-	lc80
-	cd 20 0c cd 24 0c c3 80 0c
-	spjc80
-	g
+	LC80
+	CD 20 0C CD 24 0C C3 80 0C
+	SPJC80
+	G
 
 	type characters for your amusement.  To return to the debugger,
 	type ^Z.
-
-Display
--------
-
-The display implementation is intended to exactly replicate what I
-saw when I was programming. Because we used a vintage black and
-white TV studio monitor for the 1960's, it had very wide scan line
-spacing, so I duplicated this by inserting blank lines between the
-active rows of pixels representing the characters.
