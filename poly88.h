@@ -14,7 +14,8 @@ class Poly88 : public I8080
 	std::shared_ptr<UsartControl> usartControl;
 public:
 
-	Poly88(std::shared_ptr<FileDialogBridge> fileDialogBridge);
+	Poly88( std::shared_ptr<FileDialogBridge> fileDialogBridge,
+		MemoryInterfacePtr memory);
 	~Poly88();
 
 	bool Run(uint64_t &machineCycle, bool freeRunning = true);
@@ -27,7 +28,5 @@ public:
 		devices.Debug(debug);
 	}
 
-	void LoadROM(const char *filename) { memory.LoadROM(filename); }
-	void LoadRAM(const char *filename) { memory.LoadRAM(filename); }
 	void KeyPress(uint8_t ch);
 };

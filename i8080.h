@@ -1,14 +1,13 @@
 #pragma once
 
-#include "i8080_types.h"
-#include "i8080_trace.hpp"
-#include "memory.h"
 #include <stdint.h>
 #include <iostream>
 #include <iomanip>
 #include <vector>
 
-typedef uint16_t uint16_t;
+#include "i8080_types.h"
+#include "i8080_trace.hpp"
+#include "MemoryInterface.h"
 
 class Devices;
 
@@ -78,11 +77,12 @@ private:
 
 	int singleStepCounter;   // num instructions to interrupt (for single step)
 
+protected:
+	MemoryInterfacePtr  memory;
+
 public:
 
-	Memory  memory;
-
-	I8080();
+	I8080(MemoryInterfacePtr memory);
 	~I8080();
 	void DumpState() const;
 
@@ -121,8 +121,8 @@ public:
 	uint8_t L() const { return regHL.byte.l; }
 	uint8_t L(uint8_t b) { regHL.byte.l = b; return L(); }
 
-	uint8_t M() const { return memory.get_byte(regHL.word); }
-	uint8_t M(uint8_t b) { memory.set_byte(regHL.word,b); return M();}
+	uint8_t M() const { return memory->ReadByte(regHL.word); }
+	uint8_t M(uint8_t b) { memory->WriteByte(regHL.word,b); return M();}
 
 	uint16_t SP() const { return regSP; }
 	uint16_t SP(uint16_t a) { regSP = a; return SP(); }
@@ -158,4 +158,18 @@ public:
 	std::string Disassemble(uint16_t pc);
 	std::string Flags();
 	int InstructionLength(uint16_t pc);
+
+	// These four methods are duplicated here because the
+	// Intel 8080 implements 16 byte read/write in reverse
+	// order (little endian).
+	uint8_t ReadByte(uint16_t offset) const { return memory->ReadByte(offset); }
+	void WriteByte(uint16_t offset, uint8_t data) { memory->WriteByte(offset, data); }
+	uint16_t Read2Byte(uint16_t offset) const {
+		return memory->ReadByte(offset) | (memory->ReadByte(offset + 1) << 8);
+	}
+	void Write2Byte(uint16_t offset, uint16_t data) {
+		memory->WriteByte(offset, data);
+		memory->WriteByte(offset + 1, data >> 8);
+	}
 };
+using MemoryInterfacePtr = std::shared_ptr<MemoryInterface>;
