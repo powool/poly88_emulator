@@ -7,41 +7,58 @@
 
 #include "MemoryInterface.h"
 
-class TieredMemory : public MemoryInterface {
+class Storage {
+    public:
+	std::vector<uint8_t> data;
+	bool addressIsValid = false;
+	bool readWrite = false;
+	uint16_t address = 0;
 
-	struct Storage {
-		std::vector<uint8_t> data;
-		uint16_t address = 0;
-
-		Storage(uint16_t address, uint16_t size) : address(address) {
+	Storage(uint16_t address, uint16_t size, bool readWrite) :
+		address(address),
+		readWrite(readWrite)
+	{
+		if (size == 0) {
+			// 65536 is also 0 in uint16_t
+			data.resize(0x10000);
+		} else {
 			data.resize(size);
 		}
+	}
 
-		Storage(std::string filename);
+	Storage(const std::string &filename, bool readWrite);
+	Storage(const char *intexHex[], bool readWrite);
 
-		uint8_t &GetDataAddress(uint16_t address) {
-			return data[address - this->address];
-		}
-	};
+	uint8_t &GetDataAddress(uint16_t address) {
+		return data[address - this->address];
+	}
+};
+
+class TieredMemory : public MemoryInterface {
 
 	std::array<uint8_t *, 65536> readMemoryPtrs;
 	std::array<uint8_t *, 65536> writeMemoryPtrs;
 	std::vector<std::shared_ptr<Storage>> storagePtrs;
-
-	void Insert(std::shared_ptr<Storage> storage, bool isRAM = false) {
-		for (uint16_t address = storage->address; address < storage->address + storage->data.size(); address ++) {
+    public:
+	void Insert(std::shared_ptr<Storage> storage) {
+		uint16_t address;
+		for (address = storage->address; address < storage->address + storage->data.size() - 1; address ++) {
 			readMemoryPtrs[address] = &(storage->GetDataAddress(address));
-			if (isRAM) {
+			if (storage->readWrite) {
 				writeMemoryPtrs[address] = &(storage->GetDataAddress(address));
 			}
+		}
+		readMemoryPtrs[address] = &(storage->GetDataAddress(address));
+		if (storage->readWrite) {
+			writeMemoryPtrs[address] = &(storage->GetDataAddress(address));
 		}
 		storagePtrs.push_back(storage);
 	}
 
 	TieredMemory() {
-		// Insert RAM storage, which ensures that ever read and
+		// Insert RAM storage, which ensures that every read and
 		// write location has a valid memory pointer.
-		Insert(std::make_shared<Storage>(0, 65536), true);
+		Insert(std::make_shared<Storage>(0, 65536, true));
 	}
 
 	uint8_t ReadByte(uint16_t address) const {
@@ -57,3 +74,4 @@ class TieredMemory : public MemoryInterface {
 		*byteAddress = data;
 	}
 };
+using TieredMemoryPtr = std::shared_ptr<TieredMemory>;
