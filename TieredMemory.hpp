@@ -28,6 +28,9 @@ class Storage {
 
 	Storage(const std::string &filename, bool readWrite);
 	Storage(const char *intexHex[], bool readWrite);
+	// Some intel hex files will use 0 based offsets,
+	// in which case we need to set the destination address.
+	void SetAddress(uint16_t address) { this->address = address; }
 
 	uint8_t &GetDataAddress(uint16_t address) {
 		return data[address - this->address];

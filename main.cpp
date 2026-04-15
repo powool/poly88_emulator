@@ -428,6 +428,7 @@ class MainWindow : public QMainWindow
 	bool closed = false;
 	int  cpuSpeed = 50;
 
+	TieredMemoryPtr memory;
 	std::shared_ptr<PolyMorphics88> emulator;
 	PolyVdi *polyVdi = nullptr;
 
@@ -729,7 +730,7 @@ class MainWindow : public QMainWindow
 		// ---- File dialog bridge ----
 		fileDialogBridge = std::make_shared<FileDialogBridge>();
 
-		auto memory = std::make_shared<TieredMemory>();
+		memory = std::make_shared<TieredMemory>();
 		auto romMonitor = std::make_shared<Storage>(monitorHex, false);
 		memory->Insert(romMonitor);
 		emulator = std::make_shared<PolyMorphics88>(fileDialogBridge, memory);
