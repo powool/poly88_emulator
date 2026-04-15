@@ -34,6 +34,7 @@
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QPlainTextEdit>
 #include <QTextCursor>
 #include <QFontDialog>
@@ -42,6 +43,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 
+#include "IntelHex.hpp"
 #include "TieredMemory.hpp"
 #include "PolyMorphics88.hpp"
 #include "Poly88VdiFont.h"
@@ -440,6 +442,7 @@ class MainWindow : public QMainWindow
 	QAction *singleStepAction = nullptr;
 	QAction *resetAction    = nullptr;
 	QAction *loadImageAction = nullptr;
+	QAction *loadRomAction = nullptr;
 
 	// Toolbar-area widgets
 	QPushButton *runStopButton    = nullptr;
@@ -503,6 +506,9 @@ class MainWindow : public QMainWindow
 		loadImageAction = fileMenu->addAction("Load Image...");
 		loadImageAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_O));
 		connect(loadImageAction, &QAction::triggered, this, &MainWindow::LoadImage);
+
+		loadRomAction = fileMenu->addAction("Load ROM...");
+		connect(loadRomAction, &QAction::triggered, this, &MainWindow::LoadROM);
 
 		fileMenu->addSeparator();
 
@@ -770,6 +776,7 @@ class MainWindow : public QMainWindow
 		singleStepAction->setEnabled(!running);
 		resetAction->setEnabled(!running);
 		loadImageAction->setEnabled(!running);
+		loadRomAction->setEnabled(!running);
 
 		// Buttons
 		runStopButton->setText(running ? "Running" : "Stopped");
@@ -928,6 +935,74 @@ class MainWindow : public QMainWindow
 			address++;
 			count++;
 		}
+
+		UpdateUI();
+	}
+
+	void LoadROM() {
+		if (emulator->Running()) return;
+		QString path = QFileDialog::getOpenFileName(this, "Load ROM", ".",
+			"Intel HEX Files (*.hex *.HEX);;All Files (*)");
+		if (path.isEmpty()) return;
+
+		IntelHex hex(0, nullptr, 0);
+		try {
+			hex = IntelHex(path.toStdString());
+		} catch (const std::exception &e) {
+			QMessageBox errDlg(this);
+			errDlg.setWindowTitle("Load ROM");
+			errDlg.setIcon(QMessageBox::Critical);
+			errDlg.setText(QString::fromStdString(e.what()));
+			errDlg.setStandardButtons(QMessageBox::Ok);
+			errDlg.setStyleSheet("QMessageBox { background-color: #1e1e2e; } QLabel { color: #cdd6f4; font-size: 13px; } QPushButton { background-color: #45475a; color: #cdd6f4; padding: 6px 16px; border-radius: 4px; }");
+			errDlg.exec();
+			return;
+		}
+
+		QDialog dlg(this);
+		dlg.setWindowTitle("Load ROM");
+		dlg.setStyleSheet("QDialog { background-color: #1e1e2e; } QLabel { color: #cdd6f4; font-size: 13px; } QLineEdit { background-color: #11111b; color: #cdd6f4; border: 1px solid #313244; border-radius: 4px; padding: 4px; } QPushButton { background-color: #45475a; color: #cdd6f4; padding: 6px 16px; border-radius: 4px; }");
+		auto *form = new QFormLayout(&dlg);
+
+		auto *fileLabel = new QLabel(QFileInfo(path).fileName());
+		form->addRow("File:", fileLabel);
+
+		auto *addressEdit = new QLineEdit(QString::asprintf("%04X", hex.Address()));
+		addressEdit->setFont(uiFont);
+		form->addRow("Address (hex):", addressEdit);
+
+		auto *sizeLabel = new QLabel(QString::asprintf("0x%04X (%u bytes)",
+			(unsigned)hex.Data().size(), (unsigned)hex.Data().size()));
+		form->addRow("Size:", sizeLabel);
+
+		auto *buttons = new QDialogButtonBox(
+			QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+		connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+		connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+		form->addRow(buttons);
+
+		addressEdit->selectAll();
+		addressEdit->setFocus();
+
+		if (dlg.exec() != QDialog::Accepted) return;
+
+		bool ok;
+		uint16_t address = addressEdit->text().toUShort(&ok, 16);
+		if (!ok) {
+			QMessageBox warnDlg(this);
+			warnDlg.setWindowTitle("Load ROM");
+			warnDlg.setIcon(QMessageBox::Warning);
+			warnDlg.setText("Invalid hex address.");
+			warnDlg.setStandardButtons(QMessageBox::Ok);
+			warnDlg.setStyleSheet("QMessageBox { background-color: #1e1e2e; } QLabel { color: #cdd6f4; font-size: 13px; } QPushButton { background-color: #45475a; color: #cdd6f4; padding: 6px 16px; border-radius: 4px; }");
+			warnDlg.exec();
+			return;
+		}
+
+		auto storage = std::make_shared<Storage>(address, (uint16_t)hex.Data().size(), false);
+		storage->data = hex.Data();
+		storage->SetAddress(address);
+		memory->Insert(storage);
 
 		UpdateUI();
 	}
