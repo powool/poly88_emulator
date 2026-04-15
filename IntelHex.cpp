@@ -36,7 +36,7 @@ IntelHex::IntelHex(uint16_t address, const std::vector<uint8_t> &src)
 {
 }
 
-void IntelHex::ReadLine(const std::string &readLine, bool &gotData)
+void IntelHex::ReadLine(const std::string &readLine, bool &gotData, bool ignoreChecksum)
 {
 	std::string line = readLine;
 	// Find the start code ':'
@@ -66,7 +66,7 @@ void IntelHex::ReadLine(const std::string &readLine, bool &gotData)
 	uint8_t sum = 0;
 	for (size_t i = 0; i < expectedLen; i += 2)
 		sum += parseByte(line, i);
-	if (sum != 0)
+	if (sum != 0 && ! ignoreChecksum)
 		throw IntelHexException(
 			std::format("Checksum error at address {:04X}", addr).c_str());
 
@@ -95,7 +95,7 @@ void IntelHex::ReadLine(const std::string &readLine, bool &gotData)
 	}
 }
 
-IntelHex::IntelHex(const std::string &fileName) : address(0)
+IntelHex::IntelHex(const std::string &fileName, bool ignoreChecksum) : address(0)
 {
 	std::ifstream ifs(fileName);
 	if (!ifs)
@@ -106,7 +106,7 @@ IntelHex::IntelHex(const std::string &fileName) : address(0)
 	std::string line;
 
 	while (std::getline(ifs, line)) {
-		ReadLine(line, gotData);
+		ReadLine(line, gotData, ignoreChecksum);
 	}
 
 	if (!gotData)

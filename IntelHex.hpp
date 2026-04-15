@@ -19,9 +19,9 @@ class IntelHex {
 	IntelHex(uint16_t address, const std::vector<uint8_t> &data);
 
 	// throw with explanation of failure
-	void ReadLine(const std::string &line, bool &gotData);
+	void ReadLine(const std::string &line, bool &gotData, bool ignoreChecksum = false);
 	IntelHex(const char *intelHex[]);
-	IntelHex(const std::string &fileName);
+	IntelHex(const std::string &fileName, bool ignoreChecksum = false);
 	void Save(const std::string &fileName, bool appendEndRecord = false);
 	const std::vector<uint8_t> &Data() const { return data; }
 	uint16_t Address() { return address; }
