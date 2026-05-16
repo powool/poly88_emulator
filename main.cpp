@@ -35,6 +35,7 @@
 #include <QMouseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFile>
 #include <QPlainTextEdit>
 #include <QTextCursor>
 #include <QFontDialog>
@@ -444,6 +445,8 @@ class MainWindow : public QMainWindow
 	QAction *loadImageAction = nullptr;
 	QAction *loadRomAction = nullptr;
 	QString lastImageDir = ".";
+	QString lastKeyboardFileDir = ".";
+	QString pasteBufferText;
 
 	// Toolbar-area widgets
 	QPushButton *runStopButton    = nullptr;
@@ -522,6 +525,15 @@ class MainWindow : public QMainWindow
 		auto *quitAction = fileMenu->addAction("Quit");
 		quitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
 		connect(quitAction, &QAction::triggered, this, &MainWindow::ConfirmQuit);
+
+		// Keyboard menu
+		auto *keyboardMenu = menuBar->addMenu("&Keyboard");
+
+		auto *kbFromFileAction = keyboardMenu->addAction("From File...");
+		connect(kbFromFileAction, &QAction::triggered, this, &MainWindow::KeyboardFromFile);
+
+		auto *kbPasteAction = keyboardMenu->addAction("Paste Buffer...");
+		connect(kbPasteAction, &QAction::triggered, this, &MainWindow::KeyboardPasteBuffer);
 
 		// Help menu
 		auto *helpMenu = menuBar->addMenu("&Help");
@@ -939,6 +951,71 @@ class MainWindow : public QMainWindow
 		}
 
 		UpdateUI();
+	}
+
+	void SendBytesToKeyboard(const QByteArray &data) {
+		for (int i = 0; i < data.size(); i++) {
+			uint8_t ch = static_cast<uint8_t>(data[i]);
+			if (ch == '\n' || ch == '\r') {
+				if (ch == '\n' && i + 1 < data.size() && data[i + 1] == '\r') i++;
+				else if (ch == '\r' && i + 1 < data.size() && data[i + 1] == '\n') i++;
+				ch = '\r';
+			}
+			emulator->KeyPress(ch);
+			if (ch == '\r') {
+				emulator->KeyPress('\0');
+				emulator->KeyPress('\0');
+				emulator->KeyPress('\0');
+				emulator->KeyPress('\0');
+				emulator->KeyPress('\0');
+			}
+		}
+	}
+
+	void KeyboardFromFile() {
+		QString path = QFileDialog::getOpenFileName(this, "Keyboard From File", lastKeyboardFileDir,
+			"All Files (*)");
+		if (path.isEmpty()) return;
+		lastKeyboardFileDir = QFileInfo(path).absolutePath();
+
+		QFile file(path);
+		if (!file.open(QIODevice::ReadOnly)) {
+			QMessageBox::warning(this, "Keyboard From File", "Could not open file.");
+			return;
+		}
+
+		QByteArray data = file.readAll();
+		SendBytesToKeyboard(data);
+	}
+
+	void KeyboardPasteBuffer() {
+		QDialog dlg(this);
+		dlg.setWindowTitle("Paste Buffer");
+		auto *layout = new QVBoxLayout(&dlg);
+
+		auto *textEdit = new QPlainTextEdit(&dlg);
+		textEdit->setPlainText(pasteBufferText);
+		layout->addWidget(textEdit);
+
+		auto *buttonLayout = new QHBoxLayout();
+		buttonLayout->addStretch();
+		auto *cancelBtn = new QPushButton("Cancel", &dlg);
+		auto *pasteBtn = new QPushButton("Paste", &dlg);
+		buttonLayout->addWidget(cancelBtn);
+		buttonLayout->addWidget(pasteBtn);
+		layout->addLayout(buttonLayout);
+
+		connect(cancelBtn, &QPushButton::clicked, &dlg, &QDialog::reject);
+		connect(pasteBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+		dlg.resize(400, 300);
+		int result = dlg.exec();
+		pasteBufferText = textEdit->toPlainText();
+
+		if (result == QDialog::Accepted) {
+			QByteArray data = pasteBufferText.toUtf8();
+			SendBytesToKeyboard(data);
+		}
 	}
 
 	void LoadROM() {
