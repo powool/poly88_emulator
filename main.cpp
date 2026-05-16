@@ -908,7 +908,7 @@ class MainWindow : public QMainWindow
 	void LoadImage() {
 		if (emulator->Running()) return;
 		QString path = QFileDialog::getOpenFileName(this, "Load Image", ".",
-			"Image Files (*.img *.IMG);;All Files (*)");
+			"Image Files (*.img *.IMG *.bin *.BIN);;All Files (*)");
 		if (path.isEmpty()) return;
 
 		std::ifstream file(path.toStdString(), std::ios::binary);
