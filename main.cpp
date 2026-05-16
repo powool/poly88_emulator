@@ -443,6 +443,7 @@ class MainWindow : public QMainWindow
 	QAction *resetAction    = nullptr;
 	QAction *loadImageAction = nullptr;
 	QAction *loadRomAction = nullptr;
+	QString lastImageDir = ".";
 
 	// Toolbar-area widgets
 	QPushButton *runStopButton    = nullptr;
@@ -915,9 +916,10 @@ class MainWindow : public QMainWindow
 
 	void LoadImage() {
 		if (emulator->Running()) return;
-		QString path = QFileDialog::getOpenFileName(this, "Load Image", ".",
+		QString path = QFileDialog::getOpenFileName(this, "Load Image", lastImageDir,
 			"Image Files (*.img *.IMG *.bin *.BIN);;All Files (*)");
 		if (path.isEmpty()) return;
+		lastImageDir = QFileInfo(path).absolutePath();
 
 		std::ifstream file(path.toStdString(), std::ios::binary);
 		if (!file) {
