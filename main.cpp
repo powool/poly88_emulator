@@ -963,11 +963,7 @@ class MainWindow : public QMainWindow
 			}
 			emulator->KeyPress(ch);
 			if (ch == '\r') {
-				emulator->KeyPress('\0');
-				emulator->KeyPress('\0');
-				emulator->KeyPress('\0');
-				emulator->KeyPress('\0');
-				emulator->KeyPress('\0');
+				std::this_thread::sleep_for(std::chrono::milliseconds(25));
 			}
 		}
 	}
