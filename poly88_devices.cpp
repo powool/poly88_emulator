@@ -48,6 +48,8 @@ void KeyBoard::ShutDown()
 
 uint8_t KeyBoard::Read()
 {
+	std::lock_guard<std::mutex> lock(mutex);
+
 	if(keys.size())
 	{
 		lastKey = keys.front();
@@ -67,6 +69,7 @@ void KeyBoard::Write(uint8_t data)
 
 bool KeyBoard::Poll()
 {
+	std::lock_guard<std::mutex> lock(mutex);
 	if(keys.size()) {
 		SetInterruptPending(true);
 	}
@@ -75,6 +78,7 @@ bool KeyBoard::Poll()
 
 void KeyBoard::Insert(uint8_t ch)
 {
+	std::lock_guard<std::mutex> lock(mutex);
 	keys.push(ch);
 	SetInterruptPending(true);
 }

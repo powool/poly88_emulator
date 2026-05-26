@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <queue>
 
 extern void MyIntSleep(int);
@@ -14,6 +15,7 @@ extern void MyIntSleep(int);
 class KeyBoard : public Device
 {
 	std::queue<uint8_t>	keys;
+	std::mutex mutex;
 	uint8_t lastKey;
 public:
 	KeyBoard(I8080 &i8080, Devices &devices);
