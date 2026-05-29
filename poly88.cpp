@@ -31,7 +31,10 @@ Poly88::Poly88(std::shared_ptr<FileDialogBridge> fileDialogBridge,
 {
 	keyboard = std::make_shared<KeyBoard>(*this, devices);
 	devices.AddDevice(keyboard);
-	devices.AddDevice(std::make_shared<Timer>(*this, devices));
+
+	timer = std::make_shared<Timer>(*this, devices);
+	devices.AddDevice(timer);
+
 	devices.AddDevice(std::make_shared<BaudRateGenerator>(*this, devices));
 
 	usart = std::make_shared<Usart>(*this, devices);
@@ -91,8 +94,9 @@ bool Poly88::Run(uint64_t &machineCycle, bool freeRunning)
 			std::cout << "User closed application." << std::endl;
 			return true;
 		}
-		if(InterruptEnable())
+		if(InterruptEnable()) {
 			devices.CheckInterrupts(this);  // may reset PC
+		}
 	}
 
 	if(Halt())

@@ -10,6 +10,7 @@ class Poly88 : public I8080
 	std::shared_ptr<FileDialogBridge> fileDialogBridge;
 	Devices	devices;
 	std::shared_ptr<KeyBoard> keyboard;
+	std::shared_ptr<Timer> timer;
 	std::shared_ptr<Usart> usart;
 	std::shared_ptr<UsartControl> usartControl;
 public:
@@ -26,6 +27,14 @@ public:
 
 	void Debug(bool debug) {
 		devices.Debug(debug);
+	}
+
+	void DisableTimer() {
+		timer->ShutDown();
+	}
+
+	void EnableTimer() {
+		timer->StartUp();
 	}
 
 	void KeyPress(uint8_t ch);
