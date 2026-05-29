@@ -25,17 +25,17 @@ private:
 			uint8_t l;
 			uint8_t h;
 		} byte;
-		uint16_t word;
+		uint16_t word = 0;
 	};
 
 	Register regBC;
 	Register regDE;
 	Register regHL;
 
-	uint16_t regSP;
-	uint16_t regPC;
+	uint16_t regSP = 0;
+	uint16_t regPC = 0;
 
-	uint8_t  regA;
+	uint8_t  regA = 0;
 
 	struct PSW
 	{
@@ -72,10 +72,10 @@ private:
 	PSW	_PSW;
 	PSW PSWTable[256];
 
-	bool halt;
-	bool interruptEnable;
+	bool halt = false;
+	bool interruptEnable = false;
 
-	int singleStepCounter;   // num instructions to interrupt (for single step)
+	int singleStepCounter = 0;   // num instructions to interrupt (for single step)
 
 protected:
 	MemoryInterfacePtr  memory;
