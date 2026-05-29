@@ -61,6 +61,11 @@ class PolyMorphics88 : public EmulatorInterface {
 
 	void RunStop(bool runStop) override {
 		running = runStop;
+		if (running) {
+			poly88.EnableTimer();
+		} else {
+			poly88.DisableTimer();
+		}
 	}
 
 	bool Halted() const override {
