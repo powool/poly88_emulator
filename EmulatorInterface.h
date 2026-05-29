@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <utility>
 
 class EmulatorInterface {
     public:
@@ -28,7 +29,8 @@ class EmulatorInterface {
 	virtual uint16_t SP(uint16_t sp) = 0;
 	virtual uint16_t PC() const = 0;
 	virtual uint16_t PC(uint16_t pc) = 0;
-	virtual std::string Disassemble(uint16_t pc) = 0;
+	virtual std::pair<std::string, uint16_t> Disassemble(uint16_t pc) = 0;
+	virtual std::string DumpState(int instructionIndex) = 0;
 	virtual void KeyPress(uint8_t ch) = 0;
 	virtual bool Running() const = 0;
 	virtual void ToggleRunning() = 0;
