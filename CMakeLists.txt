@@ -29,6 +29,7 @@ qt_add_executable(${PROJECT_NAME}
 	Keyboard.cpp
 	TieredMemory.cpp
 	IntelHex.cpp
+	Instructions.cpp
 )
 
 # Link it all up
