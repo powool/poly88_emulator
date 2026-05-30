@@ -1,22 +1,41 @@
 #pragma once
 #include <atomic>
+#include <algorithm>
 #include <thread>
 #include "EmulatorInterface.h"
 #include "FileDialogBridge.hpp"
+#include "Instructions.h"
+#include "SymbolTable.hpp"
 #include "poly88.h"
 
 class PolyMorphics88 : public EmulatorInterface {
+	std::atomic<int> cpuSpeed;
+	std::atomic<int> cpuSleep;
 	Poly88 poly88;
 	std::shared_ptr<FileDialogBridge> fileDialogBridge;
+	std::shared_ptr<SymbolTable> symbolTable;
 	uint64_t machineCycle = 0;
 	std::thread executionThread;
 	std::atomic<bool> requestThreadExit = false;
 	std::atomic<bool> running = false;
+	int CpuSpeedToMicrosecondsSleep(int cpuSpeed) {
+		// 100 -> 0 (microseconds)
+		// 0 -> 1,000,000
+		return 1000000 - (cpuSpeed * 10000);
+	}
 	void ExecutionThread() {
+		int instructionIndex = 0;
 		while(!requestThreadExit) {
 			if (running) {
+#if 0
+				if (PC() > 0x400) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+					std::cout << DumpState(instructionIndex++) << std::endl;
+				}
+#endif
 				// let poly88 do any rate limiting on speed
 				poly88.Run(machineCycle, true);
+//				std::this_thread::sleep_for(std::chrono::microseconds(cpuSleep.load()));
 			} else {
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 			}
@@ -24,13 +43,18 @@ class PolyMorphics88 : public EmulatorInterface {
 	}
     public:
 	PolyMorphics88(std::shared_ptr<FileDialogBridge> fileDialogBridge,
-			MemoryInterfacePtr memory) :
+			MemoryInterfacePtr memory,
+			std::shared_ptr<SymbolTable> symbolTable
+		) :
 		fileDialogBridge(fileDialogBridge),
+		symbolTable(symbolTable),
 		poly88(fileDialogBridge, memory)
 	{
 		poly88.Reset();
 		poly88.InterruptEnable(false);
 		executionThread = std::thread(&PolyMorphics88::ExecutionThread, this);
+		cpuSpeed.store(100);
+		cpuSleep.store(2);
 	}
 
 	~PolyMorphics88() {
@@ -68,6 +92,11 @@ class PolyMorphics88 : public EmulatorInterface {
 		}
 	}
 
+	void SetCpuSpeed(int percentage) override {
+		cpuSpeed = std::clamp(percentage, 0, 100);
+		cpuSleep.store(CpuSpeedToMicrosecondsSleep(cpuSpeed));
+	}
+
 	bool Halted() const override {
 		return poly88.Halt();
 	}
@@ -81,8 +110,7 @@ class PolyMorphics88 : public EmulatorInterface {
 	}
 
 	uint8_t M() const override {
-		return poly88.A();
-		return 0x11;
+		return GetMemoryInt(HL());
 	}
 
 	std::string PSW() const override {
@@ -135,8 +163,33 @@ class PolyMorphics88 : public EmulatorInterface {
 		return poly88.PC(pc);
 	}
 
-	std::string Disassemble(uint16_t pc) override {
-		return poly88.Disassemble(pc);
+	std::pair<std::string, uint16_t> Disassemble(uint16_t pc) override {
+		return std::make_pair(poly88.Disassemble(pc), pc);
+	}
+
+	std::string DumpState(int instructionIndex) override {
+
+		uint16_t starsp = GetMemoryInt(SP());
+		uint8_t starpc = GetMemoryByte(PC());
+		uint8_t starpc1 = GetMemoryByte(PC()+1);
+		uint8_t starpc2 = GetMemoryByte(PC()+2);
+		auto disassembly = instructions8085[starpc].AsString(
+			PC(),
+			starpc1,
+			starpc2,
+			*symbolTable,
+			false);
+
+		return std::format("{:08d} a:{:02X} m:{:02X} bc:{:04X} de:{:04X} hl:{:04X} sp:{:04X} *sp:{:04X}\t{:36s}",
+			instructionIndex,
+			A(),
+			M(),
+			BC(),
+			DE(),
+			HL(),
+			SP(),
+			starsp,
+			disassembly);
 	}
 
 	void KeyPress(uint8_t ch) override {

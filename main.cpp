@@ -1,3 +1,4 @@
+#include <getopt.h>
 #include <cmath>
 #include <array>
 #include <format>
@@ -44,12 +45,13 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 
-#include "IntelHex.hpp"
-#include "TieredMemory.hpp"
-#include "PolyMorphics88.hpp"
-#include "Poly88VdiFont.h"
-#include "Poly88Vdi.hpp"
 #include "FileDialogBridge.hpp"
+#include "IntelHex.hpp"
+#include "Instructions.h"
+#include "Poly88Vdi.hpp"
+#include "PolyMorphics88.hpp"
+#include "SymbolTable.hpp"
+#include "TieredMemory.hpp"
 
 const char *monitorHex[] = {
 ":10000000310010C30002E1E9F5C5D5E52A100CE97D",
@@ -428,8 +430,10 @@ class RegisterGrid : public QGroupBox {
 // ---------------------------------------------------------------------------
 class MainWindow : public QMainWindow
 {
+	std::shared_ptr<SymbolTable>	symbolTable = std::make_shared<SymbolTable>();
+
 	bool closed = false;
-	int  cpuSpeed = 50;
+	int  cpuSpeed = 100;
 
 	TieredMemoryPtr memory;
 	std::shared_ptr<PolyMorphics88> emulator;
@@ -640,6 +644,7 @@ class MainWindow : public QMainWindow
 		speedSlider->setToolTip("CPU execution speed");
 		connect(speedSlider, &QSlider::valueChanged, this, [this](int v) {
 			cpuSpeed = v;
+			emulator->SetCpuSpeed(cpuSpeed);
 			speedValueLabel->setText(QString::number(v) + "%");
 		});
 		toolbarRow->addWidget(speedSlider);
@@ -752,7 +757,7 @@ class MainWindow : public QMainWindow
 		memory = std::make_shared<TieredMemory>();
 		auto romMonitor = std::make_shared<Storage>(monitorHex, false);
 		memory->Insert(romMonitor);
-		emulator = std::make_shared<PolyMorphics88>(fileDialogBridge, memory);
+		emulator = std::make_shared<PolyMorphics88>(fileDialogBridge, memory, symbolTable);
 
 		polyVdi->setFocusPolicy(Qt::StrongFocus);
 		polyVdi->installEventFilter(this);
@@ -845,7 +850,8 @@ class MainWindow : public QMainWindow
 	}
 
 	void AppendTrace() {
-		QString line = QString::fromStdString(emulator->Disassemble(emulator->PC()));
+//		QString line = QString::fromStdString(emulator->Disassemble(emulator->PC()));
+		QString line = QString::fromStdString(emulator->DumpState(0));
 		traceOutput->appendPlainText(line);
 		// Enforce max rows
 		if (traceOutput->document()->blockCount() > maxTraceRows) {
@@ -926,13 +932,11 @@ class MainWindow : public QMainWindow
 		}
 	}
 
-	void LoadImage() {
-		if (emulator->Running()) return;
-		QString path = QFileDialog::getOpenFileName(this, "Load Image", lastImageDir,
-			"Image Files (*.img *.IMG *.bin *.BIN);;All Files (*)");
-		if (path.isEmpty()) return;
-		lastImageDir = QFileInfo(path).absolutePath();
+	void LoadSymbolsFromFile(QString path) {
+		symbolTable->Load(path.toStdString());
+	}
 
+	void LoadImageFromFile(QString path) {
 		std::ifstream file(path.toStdString(), std::ios::binary);
 		if (!file) {
 			QMessageBox::warning(this, "Load Image", "Could not open file.");
@@ -949,6 +953,16 @@ class MainWindow : public QMainWindow
 			address++;
 			count++;
 		}
+	}
+
+	void LoadImage() {
+		if (emulator->Running()) return;
+		QString path = QFileDialog::getOpenFileName(this, "Load Image", lastImageDir,
+			"Image Files (*.img *.IMG *.bin *.BIN);;All Files (*)");
+		if (path.isEmpty()) return;
+		lastImageDir = QFileInfo(path).absolutePath();
+
+		LoadImageFromFile(path);
 
 		UpdateUI();
 	}
@@ -962,9 +976,6 @@ class MainWindow : public QMainWindow
 				ch = '\r';
 			}
 			emulator->KeyPress(ch);
-			if (ch == '\r') {
-				std::this_thread::sleep_for(std::chrono::milliseconds(25));
-			}
 		}
 	}
 
@@ -1169,11 +1180,54 @@ class MainWindow : public QMainWindow
 	}
 };
 
-int main(int argc, char* argv[])
+void Usage(int argc, char **argv)
 {
+	std::cerr << std::format("usage: {} [args]", argv[0]) << std::endl;
+	exit(0);
+}
+
+int main(int argc, char **argv)
+{
+	int opt;
+	std::vector<QString> imageFiles;
+	std::vector<QString> symbolFiles;
+
+	while ((opt = getopt(argc, argv, "i:s:")) != -1) {
+		switch(opt) {
+			case 'i': imageFiles.push_back(optarg); break;
+			case 's': symbolFiles.push_back(optarg); break;
+			default: Usage(argc, argv);
+		}
+	}
+
+	while(optind < argc) {
+		QString arg = argv[optind];
+
+		if (arg.endsWith(".bin")) {
+			imageFiles.push_back(arg);
+			optind++;
+			continue;
+		}
+
+		if (arg.endsWith(".sym")) {
+			symbolFiles.push_back(arg);
+			optind++;
+			continue;
+		}
+	}
+
 	// create the Qt application
 	QApplication qtApplication(argc, argv);
 	auto win = std::make_unique<MainWindow>();
+
+	for (auto &imageFile: imageFiles) {
+		win->LoadImageFromFile(imageFile);
+	}
+
+	for (auto &symbolFile: symbolFiles) {
+		win->LoadSymbolsFromFile(symbolFile);
+	}
+
 	win->show();
 
 	uint64_t cycle = 0;

@@ -12,6 +12,7 @@ class EmulatorInterface {
 	virtual void RunOneInstruction() = 0;
 	virtual void Reset() = 0;
 	virtual void RunStop(bool runStop) = 0;
+	virtual void SetCpuSpeed(int percentage) = 0;
 
 	virtual bool Halted() const = 0;
 	virtual bool InterruptEnable() const = 0;

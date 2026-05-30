@@ -7,6 +7,9 @@
 #include <QImage>
 #include <QColor>
 
+#include "EmulatorInterface.h"
+#include "Poly88VdiFont.h"
+
 // ---------------------------------------------------------------------------
 // Parse XPM C-string array into a QPixmap (10x15, 2 colors, 1 char/pixel)
 // ---------------------------------------------------------------------------
