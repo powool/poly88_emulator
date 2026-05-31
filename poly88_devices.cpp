@@ -50,15 +50,14 @@ uint8_t KeyBoard::Read()
 {
 	std::lock_guard<std::mutex> lock(mutex);
 
-	if(keys.size())
-	{
+	if(keys.size()) {
 		lastKey = keys.front();
 		keys.pop();
 	}
 
-	// clear interrupt pending when circular buffer is cleared
-	if(!keys.size())
-		SetInterruptPending(false);
+	// Let ::Poll reset it to true when enough time
+	// has elapsed
+	SetInterruptPending(false);
 
 	return lastKey;
 }
@@ -69,9 +68,31 @@ void KeyBoard::Write(uint8_t data)
 
 bool KeyBoard::Poll()
 {
+	static struct timespec t1 = {0,0};
 	std::lock_guard<std::mutex> lock(mutex);
 	if(keys.size()) {
-		SetInterruptPending(true);
+		struct timespec t2;
+		clock_gettime(CLOCK_REALTIME, &t2);
+
+		double t1F = t1.tv_sec + (t1.tv_nsec / 1000000000.0);
+		double t2F = t2.tv_sec + (t2.tv_nsec / 1000000000.0);
+
+		// This is purely to allow keyboard paste of
+		// entire BASIC programs - Altair BASIC needs
+		// a little bit of time to parse the input line.
+		//
+		// delay .02s for newline, .0001 for normal char
+		// 50 lines per second, 10000 chars per second.
+		//
+		// As an example as to why ... converting the
+		// input line in ASCII to the internal tokenized
+		// version could take hundreds of thousands of
+		// machine instructions.
+		double delay = (lastKey == '\r') ? .02 : .0001;
+		if(t2F - t1F > delay) {
+			t1 = t2;
+			SetInterruptPending(true);
+		}
 	}
 	return false;
 }
@@ -80,7 +101,6 @@ void KeyBoard::Insert(uint8_t ch)
 {
 	std::lock_guard<std::mutex> lock(mutex);
 	keys.push(ch);
-	SetInterruptPending(true);
 }
 
 bool KeyBoard::RunEmulatorCommand(const std::vector<std::string> &args)
@@ -544,8 +564,7 @@ void UsartControl::Poll()
 {
 	static struct timespec t1 = {0,0};
 
-	if(usart->usartFile && usart->usartFile->Ready())
-	{
+	if(usart->usartFile && usart->usartFile->Ready()) {
 		if(usart->usartFile->GetState() == IUsartFile::OUTPUT &&
 			!tapeRunning &&
 			tapeTimeout + 3 < time(nullptr)) {
@@ -561,9 +580,8 @@ void UsartControl::Poll()
 		double t1F = t1.tv_sec + (t1.tv_nsec / 1000000000.0);
 		double t2F = t2.tv_sec + (t2.tv_nsec / 1000000000.0);
 
-		// ~ 1000 characters per second
-		if(t2F - t1F > .0005)
-		{
+		// ~ 2000 characters per second
+		if(t2F - t1F > .0005) {
 			t1 = t2;
 			usart->SetInterruptPending(true);
 		}
